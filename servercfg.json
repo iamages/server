@@ -1,0 +1,12 @@
+{
+  "port": 80,
+  "port_secure": 443,
+  "storage_directory": "./storage",
+  "keys": {
+    "directory": "",
+    "files": {
+      "certificate": "",
+      "certificate_key": ""
+    }
+  }
+}

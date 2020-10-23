@@ -1,2 +1,2 @@
-# server
-Iamages Server/Backend/whatever.
+# Iamages
+A simple image cloud containing backend API and frontend UI.
