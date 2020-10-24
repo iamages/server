@@ -6,6 +6,7 @@ import logging
 import bcrypt
 import ssl
 import magic
+import random
 from PIL import Image
 import tornado.web
 import tornado.escape
@@ -71,6 +72,14 @@ class LatestFilesHandler(tornado.web.RequestHandler):
         except:
             logging.exception("Failed to get latest list!")
         self.write(response)
+
+class RandomFileHandler(tornado.web.RequestHandler):
+    def get(self):
+        total_FileIDs = storedb_cursor.execute("SELECT COUNT(*) FROM Files").fetchone()[0]
+        if total_FileIDs > 0:
+            self.redirect("/iamages/api/info/" + str(random.randint(1, total_FileIDs)))
+        else:
+            self.send_error(503)
 
 class FileUploadHandler(tornado.web.RequestHandler):
     def put(self):
@@ -333,6 +342,7 @@ class NewUserHandler(tornado.web.RequestHandler):
 app_endpoints = [
     (r'/iamages/api/?', RootInfoHandler),
     (r'/iamages/api/latest/?', LatestFilesHandler),
+    (r'/iamages/api/random/?', RandomFileHandler),
     (r'/iamages/api/upload/?', FileUploadHandler),
     (r'/iamages/api/modify/?', FileModifyHandler),
     (r'/iamages/api/info/\d', FileInfoHandler),
