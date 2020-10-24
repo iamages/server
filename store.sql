@@ -4,6 +4,8 @@ CREATE TABLE Files (
     FileDescription TEXT,
     FileNSFW INTEGER,
     FileMime TEXT,
+    FileWidth INTEGER,
+    FileHeight INTEGER,
     FileCreatedDate TEXT
 );
 CREATE TABLE Files_Users (

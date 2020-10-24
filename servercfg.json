@@ -1,6 +1,7 @@
 {
   "port": 80,
   "port_secure": 443,
+  "max_file_size": 10485760,
   "storage_directory": "./storage",
   "keys": {
     "directory": "",
