@@ -170,7 +170,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
             if filemeta:
                 response["FileID"] = filemeta[0]
                 response["FileName"] = filemeta[1]
-                response["FileDescription"] = filemeta[2],
+                response["FileDescription"] = filemeta[2]
                 response["FileNSFW"] = filemeta[3]
                 response["FileMime"] = filemeta[4]
                 response["FileWidth"] = filemeta[5]
