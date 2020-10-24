@@ -7,6 +7,7 @@ import bcrypt
 import ssl
 import magic
 import random
+import shutil
 from PIL import Image
 import tornado.web
 import tornado.escape
@@ -132,7 +133,10 @@ class FileModifyHandler(tornado.web.RequestHandler):
                             if modification == "FileDescription" or modification == "FileNSFW":
                                 storedb_cursor.execute(base_query.format(modification), (request["Modifications"][modification],))
                             elif modification == "DeleteFile":
-                                storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (request["FileID"]))
+                                folderpath = os.path.join(FILES_PATH, str(FileID))
+                                if os.path.isdir(folderpath):
+                                    shutil.rmtree(folderpath)
+                                storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (request["FileID"],))
                             storedb_connection.commit()
                             response["Modifications"].append(modification)
                         except:
@@ -171,7 +175,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
                 response["FileID"] = filemeta[0]
                 response["FileName"] = filemeta[1]
                 response["FileDescription"] = filemeta[2]
-                response["FileNSFW"] = filemeta[3]
+                response["FileNSFW"] = bool(filemeta[3])
                 response["FileMime"] = filemeta[4]
                 response["FileWidth"] = filemeta[5]
                 response["FileHeight"] = filemeta[6]
@@ -345,9 +349,9 @@ app_endpoints = [
     (r'/iamages/api/random/?', RandomFileHandler),
     (r'/iamages/api/upload/?', FileUploadHandler),
     (r'/iamages/api/modify/?', FileModifyHandler),
-    (r'/iamages/api/info/\d', FileInfoHandler),
-    (r'/iamages/api/embed/\d', EmbedFileHandler),
-    (r'/iamages/api/img/\d', EmbedImgGeneratorHandler),
+    (r'/iamages/api/info/.*', FileInfoHandler),
+    (r'/iamages/api/embed/.*', EmbedFileHandler),
+    (r'/iamages/api/img/.*', EmbedImgGeneratorHandler),
     (r'/iamages/api/user/info/.*', UserInfoHandler),
     (r'/iamages/api/user/files/?', UserFilesHandler),
     (r'/iamages/api/user/modify/?', UserModifyHandler),
