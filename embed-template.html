@@ -1,9 +1,23 @@
-<html>
+<html prefix="og: https://ogp.me/ns#">
   <head>
     <title>{{title}}</title>
-    <meta name="description" content="{{description}}"">
+    <meta name="description" content="{{FileDescription}}">
+    <meta property="og:site_name" content="Iamages">
+    <meta property="og:title" content="{{title}}">
+    <meta property="og:description" content="{{FileDescription}}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="/iamages/embed/{{FileID}}">
+    <meta property="og:image" content="/iamages/api/img/{{FileID}}">
+    <meta property="og:image:type" content="{{FileMime}}">
+    <meta property="og:image:alt" content="{{FileDescription}}">
   </head>
   <body>
-    <img src="{{image}}">
+    <h3>{{FileDescription}}</h3>
+    <hr>
+    <img src="/iamages/api/img/{{FileID}}" alt="We couldn't fine the file you wanted :(">
+    <hr>
+    <p>
+      Served from Iamages, the home for your wackiest images.
+    </p>
   </body>
 </html>

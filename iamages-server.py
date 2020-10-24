@@ -135,7 +135,7 @@ class FileModifyHandler(tornado.web.RequestHandler):
                 self.write(response)
                         
 
-class GetFileHandler(tornado.web.RequestHandler):
+class FileInfoHandler(tornado.web.RequestHandler):
     def post(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -167,22 +167,18 @@ class GetFileHandler(tornado.web.RequestHandler):
                 response["FileID"] = request["FileID"]
                 self.write(response)
 
-class EmbedFileHandler(tornado.web.RequestHandler):
+class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
     def get(self):
         try:
             FileID = self.request.path.split("/")[-1]
             if FileID != "":
-                filemeta = storedb_cursor.execute("SELECT FileName, FileDescription, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+                filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
                 if filemeta:
                     filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
                     if os.path.isfile(filepath):
+                        self.set_header('Content-Type', filemeta[1])
                         with open(filepath, 'rb') as file:
-                            self.render(
-                                "embed-template.html",
-                                title=filemeta[0] + " - on Iamages",
-                                description=filemeta[1],
-                                image="data:{0};base64,{1}".format(filemeta[2], base64.b64encode(file.read()).decode('utf-8'))
-                            )
+                            self.write(file.read())
                     else:
                         self.send_error(404)
                 else:
@@ -191,11 +187,33 @@ class EmbedFileHandler(tornado.web.RequestHandler):
                 self.send_error(400)
         except:
             logging.exception('Something wrong!')
+
+class EmbedFileHandler(tornado.web.RequestHandler):
+    def get(self):
+        try:
+            FileID = self.request.path.split("/")[-1]
+            if FileID != "":
+                filemeta = storedb_cursor.execute("SELECT FileName, FileDescription, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+                if filemeta:
+                    self.render(
+                        "embed-template.html",
+                        title=filemeta[0] + " - on Iamages",
+                        FileDescription=filemeta[1],
+                        FileID=FileID,
+                        FileMime=filemeta[2]
+                    )
+                else:
+                    self.send_error(404)
+            else:
+                self.send_error(400)
+        except:
+            logging.exception('Something wrong!')
             self.render(
                 "embed-template.html",
-                title="Error from Iamages",
-                description="We couldn't find the file you wanted :(",
-                image=""
+                title="Error - Iamages",
+                FileDescription=":(",
+                FileID="",
+                FileMime=""
             )
 
 class UserInfoHandler(tornado.web.RequestHandler):
@@ -301,8 +319,9 @@ app_endpoints = [
     (r'/iamages/api/latest/?', LatestFilesHandler),
     (r'/iamages/api/upload/?', FileUploadHandler),
     (r'/iamages/api/modify/?', FileModifyHandler),
-    (r'/iamages/api/get/?', GetFileHandler),
+    (r'/iamages/api/info/?', FileInfoHandler),
     (r'/iamages/api/embed/\d', EmbedFileHandler),
+    (r'/iamages/api/img/\d', EmbedImgGeneratorHandler),
     (r'/iamages/api/user/info/?', UserInfoHandler),
     (r'/iamages/api/user/files/?', UserFilesHandler),
     (r'/iamages/api/user/modify/?', UserModifyHandler),
