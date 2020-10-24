@@ -78,11 +78,8 @@ class FileUploadHandler(tornado.web.RequestHandler):
         response = {
             "FileName": None
         }
-        if not "FileName" in request or not "FileData" in request or not "FileNSFW" in request or not "FileDescription" in request:
-            self.set_status(400)
-            self.write(response)
-        else:
-            if ((len(str) * 3) / 4 < server_config["max_file_size"]):
+        if "FileName" in request and "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
+            if ((len(request["FileData"]) * 3) / 4 < server_config["max_file_size"]):
                 storedb_cursor.execute("INSERT INTO Files (FileName, FileDescription, FileNSFW, FileCreatedDate) VALUES (?, ?, ?, datetime('now'))", (request["FileName"], request["FileDescription"], request["FileNSFW"]))
                 FileID = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC").fetchone()[0]
                 folderpath = os.path.join(FILES_PATH, str(FileID))
@@ -104,6 +101,9 @@ class FileUploadHandler(tornado.web.RequestHandler):
             else:
                 self.set_status(413)
                 self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
 
 class FileModifyHandler(tornado.web.RequestHandler):
     def patch(self):
@@ -112,10 +112,7 @@ class FileModifyHandler(tornado.web.RequestHandler):
             "FileID": None,
             "Modifications": []
         }
-        if not "UserName" in request or not "UserPassword" in request or not "FileID" in request or not "Modifications" in request:
-            self.set_status(400)
-            self.write(response)
-        else:
+        if "UserName" in request and "UserPassword" in request and "FileID" in request and "Modifications" in request:
             UserID = check_user(request["UserName"], request["UserPassword"])
             if UserID:
                 FileID = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE FileID = ? AND UserID = ?", (request["FileID"], UserID)).fetchone()[0]
@@ -140,6 +137,9 @@ class FileModifyHandler(tornado.web.RequestHandler):
             else:
                 self.set_status(401)
                 self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
                         
 
 class FileInfoHandler(tornado.web.RequestHandler):
@@ -263,10 +263,7 @@ class UserFilesHandler(tornado.web.RequestHandler):
             "UserName": None,
             "UserFiles": None 
         }
-        if not "UserName" in request or not "UserPassword" in request:
-            self.set_status(400)
-            self.write(response)
-        else:
+        if "UserName" in request and "UserPassword" in request:
             userid = check_user(request["UserName"], request["UserPassword"])
             if userid:
                 files = storedb_cursor.execute("SELECT FileID FROM Files_Users INNER JOIN Users ON Files_Users.UserID = Users.UserID WHERE Users.UserID = ?", (userid,)).fetchall()
@@ -278,6 +275,9 @@ class UserFilesHandler(tornado.web.RequestHandler):
             else:
                 self.set_status(401)
                 self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
 
 class UserModifyHandler(tornado.web.RequestHandler):
     def patch(self):
@@ -286,10 +286,7 @@ class UserModifyHandler(tornado.web.RequestHandler):
             "UserName": None,
             "Modifications": []
         }
-        if not "UserName" in request or not "UserPassword" in request or not "Modifications" in request:
-            self.set_status(400)
-            self.write(response)
-        else:
+        if "UserName" in request and "UserPassword" in request and "Modifications" in request:
             UserID = check_user(request["UserName"], request["UserPassword"])
             if UserID:
                 basic_query = "UPDATE Users SET {0} = ? WHERE UserID = " + str(UserID)
@@ -308,6 +305,9 @@ class UserModifyHandler(tornado.web.RequestHandler):
             else:
                 self.set_status(401)
                 self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
 
 
 class NewUserHandler(tornado.web.RequestHandler):
@@ -316,10 +316,7 @@ class NewUserHandler(tornado.web.RequestHandler):
         response = {
             "UserName": None
         }
-        if not "UserName" in request or not "UserPassword" in request:
-            self.set_status(400)
-            self.write(response)
-        else:
+        if "UserName" in request and "UserPassword" in request:
             if check_user(request["UserName"], request["UserPassword"]):
                 self.set_status(403)
                 self.write(response)
@@ -328,6 +325,9 @@ class NewUserHandler(tornado.web.RequestHandler):
                 storedb_connection.commit()
                 response["UserName"] = request["UserName"]
                 self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
 
 
 app_endpoints = [
