@@ -2,6 +2,7 @@ import base64
 import sqlite3
 import json
 import os
+import sys
 import logging
 import bcrypt
 import ssl
@@ -20,7 +21,7 @@ IAMAGES_PATH = os.path.dirname(__file__)
 logging.info("Starting imgcloud server...")
 logging.info("Loading server configuration file...")
 try:
-    server_config = json.load(open(os.path.join(IAMAGES_PATH, 'servercfg.json'), "r"))
+    server_config = json.load(open(os.path.join(os.getcwd(), sys.argv[1]), "r"))
     logging.info("Loaded server configuration file!")
 except Exception:
     logging.exception("Server config load failed! Halting...", exc_info=True)
@@ -203,24 +204,21 @@ class FileInfoHandler(tornado.web.RequestHandler):
 
 class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
     def get(self):
-        try:
-            FileID = self.request.path.split("/")[-1]
-            if FileID != "":
-                filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
-                if filemeta:
-                    filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
-                    if os.path.isfile(filepath):
-                        self.set_header('Content-Type', filemeta[1])
-                        with open(filepath, 'rb') as file:
-                            self.write(file.read())
-                    else:
-                        self.send_error(404)
+        FileID = self.request.path.split("/")[-1]
+        if FileID != "":
+            filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+            if filemeta:
+                filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
+                if os.path.isfile(filepath):
+                    self.set_header('Content-Type', filemeta[1])
+                    with open(filepath, 'rb') as file:
+                        self.write(file.read())
                 else:
                     self.send_error(404)
             else:
-                self.send_error(400)
-        except:
-            logging.exception('Something wrong!')
+                self.send_error(404)
+        else:
+            self.send_error(400)
 
 class EmbedFileHandler(tornado.web.RequestHandler):
     def get(self):
