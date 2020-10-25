@@ -1,27 +1,27 @@
 CREATE TABLE Files (
     FileID INTEGER PRIMARY KEY,
-    FileName TEXT NOT NULL,
-    FileDescription TEXT NOT NULL,
-    FileNSFW INTEGER NOT NULL,
-    FilePrivate INTEGER NOT NULL,
-    FileMime TEXT NOT NULL,
-    FileWidth INTEGER NOT NULL,
-    FileHeight INTEGER NOT NULL,
-    FileCreatedDate TEXT NOT NULL
+    FileName TEXT,
+    FileDescription TEXT,
+    FileNSFW INTEGER,
+    FilePrivate INTEGER,
+    FileMime TEXT,
+    FileWidth INTEGER,
+    FileHeight INTEGER,
+    FileCreatedDate TEXT
 );
 CREATE TABLE Files_Users (
-    FileID INTEGER NOT NULL,
-    UserID INTEGER NOT NULL
+    FileID INTEGER,
+    UserID INTEGER
 );
 CREATE TABLE Users (
     UserID INTEGER PRIMARY KEY,
-    UserName TEXT NOT NULL,
-    UserPassword TEXT NOT NULL,
+    UserName TEXT,
+    UserPassword TEXT,
     UserBiography TEXT,
-    UserCreatedDate TEXT NOT NULL
+    UserCreatedDate TEXT
 );
 CREATE TABLE Downtimes (
-    Announcement TEXT NOT NULL,
-    AnnouncementStart TEXT NOT NULL,
-    AnnoucementEnd TEXT NOT NULL
+    Announcement TEXT,
+    AnnouncementStart TEXT,
+    AnnoucementEnd TEXT
 );
