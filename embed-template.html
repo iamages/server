@@ -1,6 +1,6 @@
 <html prefix="og: https://ogp.me/ns#">
   <head>
-    <meta content="noindex" name="robots">
+    <meta name="robots" content="noindex">
     <title>{{title}}</title>
     <meta name="description" content="{{FileDescription}}">
     <meta property="og:type" content="article">
@@ -18,14 +18,34 @@
     <meta name="twitter:description" content="{{FileDescription}}">
     <meta name="twitter:image" content="/iamages/api/img/{{FileID}}">
     <meta name="twitter:image:alt" content="{{FileDescription}}">
+    <link rel="stylesheet" href="{{static_url("css/bulma.min.css")}}">
   </head>
   <body>
-    <h3>{{FileDescription}}</h3>
-    <hr>
-    <img src="/iamages/api/img/{{FileID}}" alt="We couldn't fine the file you wanted :(">
-    <hr>
-    <p>
-      Served from Iamages, the home for your wackiest images.
-    </p>
+    <section class="section">
+      <div class="container">
+        <figure class="image is-48x48">
+          <img src="{{static_url("icons/icon-96.png")}}">
+        </figure>
+        <br>
+        <h2 class="title">{{FileDescription}}</h2>
+        <hr>
+        <img src="/iamages/api/img/{{FileID}}" alt="We couldn't fine the file you wanted :(">
+        <hr>
+        <p>
+          Served from Iamages, the open source image sharing platform.
+        </p>
+
+        <!-- <div class="card">
+          <div class="card-content">
+            <div class="content">{{FileDescription}}</div>
+          </div>
+          <div class="card-image">
+            <figure class="image">
+              <img src="/iamages/api/img/{{FileID}}" alt="{{FileDescription}}">
+            </figure>
+          </div>
+        </div> -->
+      </div>
+    </section>
   </body>
 </html>

@@ -3,98 +3,653 @@
   <head>
     <meta type="charset" value="utf-8">
     <title>Iamages API Reference</title>
+    <meta type="description" content="Reference for Iamages API.">
+    <link rel="stylesheet" href="{{static_url("css/bulma.min.css")}}">
   </head>
   <body>
-    <h1>Iamages API Reference</h1>
-    <hr>
-    <h2>API endpoints</h2>
-    <ul>
-      <li>
-        <a href="#root">/iamages/api</a>
-      </li>
-      <li>
-        <a href="#root-latest">/iamages/api/latest</a>
-      </li>
-      <li>
-        <a href="#root-upload">/iamages/api/upload</a>
-      </li>
-      <li>
-        <a href="#root-modify">/iamages/api/modify</a>
-      </li>
-      <li>
-        <a href="#root-get">/iamages/api/get</a>
-      </li>
-      <li>
-        <a href="#root-embed">/iamages/api/embed/.*</a>
-      </li>
-      <li>
-        <a href="#root-user-info">/iamages/api/user/info</a>
-      </li>
-      <li>
-        <a href="#root-user-files">/iamages/api/user/files</a>
-      </li>
-      <li>
-        <a href="#root-user-modify">/iamages/api/user/modify</a>
-      </li>
-      <li>
-        <a href="#root-user-new">/iamages/api/user/new</a>
-      </li>
-    </ul>
-    <hr>
-    <article id="root">
-      <h1>GET /iamages/api</h1>
-      <p>
-        Renders this API help page.
-      </p>
-    </article>
-    <hr>
-    <article id="root-latest">
-      <h1>GET /iamages/api/latest</h1>
-      <p>
-        Returns the latest 10 files.
-        <br><br>
-        <i>Response body type: JSON</i>
+    <section class="section">
+      <div class="container">
+        <figure class="image is-48x48">
+          <img src="{{static_url("icons/icon-96.png")}}">
+        </figure>
         <br>
-        <code>
-          <pre>
+      </div>
+      <div class="container content">
+        <h1>Iamages API Reference</h1>
+      </div>
+      <hr>
+      <div class="container content">
+        <h3>API endpoints</h3>
+        <ul>
+          <li>
+            <a href="#root">/iamages/api</a>
+          </li>
+          <li>
+            <a href="#root-latest">/iamages/api/latest</a>
+          </li>
+          <li>
+            <a href="#root-random">/iamages/api/random</a>
+          </li>
+          <li>
+            <a href="#root-upload">/iamages/api/upload</a>
+          </li>
+          <li>
+            <a href="#root-modify">/iamages/api/modify</a>
+          </li>
+          <li>
+            <a href="#root-info">/iamages/api/info/.*</a>
+          </li>
+          <li>
+            <a href="#root-embed">/iamages/api/embed/.*</a>
+          </li>
+          <li>
+            <a href="#root-img">/iamages/api/img/.*</a>
+          </li>
+          <li>
+            <a href="#root-user-info">/iamages/api/user/info/.*</a>
+          </li>
+          <li>
+            <a href="#root-user-files">/iamages/api/user/files</a>
+          </li>
+          <li>
+            <a href="#root-user-modify">/iamages/api/user/modify</a>
+          </li>
+          <li>
+            <a href="#root-user-new">/iamages/api/user/new</a>
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root" class="container content">
+        <h3>GET /iamages/api</h3>
+        <p>
+          Renders this API help page.
+        </p>
+      </div>
+      <hr>
+      <div id="root-latest" class="container content">
+        <h3>GET /iamages/api/latest</h3>
+        <p>
+          Returns the latest 10 files.
+        </p>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
             {
               "FileIDs": [1, 2, 3, 4, ...]
             }
-          </pre>
-        </code>
-      </p>
-    </article>
-    <hr>
-    <article id="root-upload">
-      <h1>POST /iamages/api/upload</h1>
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>FileIDs</code> (<code>list</code>): An array containing the 10 latest files.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-random" class="container content">
+        <h3>GET /iamages/api/random</h3>
+        <p>
+          Redirects to a random working <code>/iamages/api/info/.*</code>.
+        </p>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>302</code>: Redirect to a random file.
+          </li>
+          <li>
+            <code>503</code>: No compatible files could be found.
+          </li>
+        </ul>
+        <p>
+          For more info, see: <a href="#root-info">/iamages/api/info/.*</a>
+        </p>
+      </div>
+      <hr>
+      <div id="root-upload" class="container content">
+        <h3>PUT /iamages/api/upload</h3>
+        <p>
+          Uploads a file to Iamages.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "FileName": "",
+              "FileDescription": "",
+              "FileNSFW": false,
+              "FileData": "",
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileName</code> (<code>str</code>): The file's name.
+          </li>
+          <li>
+            <code>FileDescription</code> (<code>str</code>): The file's description.
+          </li>
+          <li>
+            <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+          </li>
+          <li>
+            <code>FileData</code> (<code>str</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
+          </li>
+          <li>
+            <code>UserName</code> (<code>str</code>): The file owner's username (optional).
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The file owner's password (optional).
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "FileID": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>str</code>): The file's unique ID.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>413</code>: The file's size exceeds the server's configured maximum file size value.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-modify" class="container content">
+        <h3>PATCH /iamages/api/modify</h3>
+        <p>
+          Modify file metadata (description, NSFW) or delete file.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": "",
+              "FileID": 0,
+              "Modifications": {
+                "FileDescription": "",
+                "FileNSFW": true/false,
+                "DeleteFile": any
+              }
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The file owner's <code>UserName</code>.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The file owner's <code>UserPassword</code>
+          </li>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+          <li>
+            <code>Modifications</code> (<code>dict</code>): Modifications to apply to the file.
+            <ul>
+              <li>
+                <code>FileDescription</code> (<code>str</code>): The file's description.
+              </li>
+              <li>
+                <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+              </li>
+              <li>
+                <code>DeleteFile</code> (<code>any</code>): Set to anything to delete file.
+              </li>
+            </ul>
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "FileID": 0,
+              "Modifications": []
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+          <li>
+            <code>Modifications</code> (<code>list</code>): Modifications applied to the file.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-info" class="container content">
+        <h3>GET /iamages/api/info/.*</h3>
+        <p>
+          Returns all publicly available metadata about the given <code>FileID</code>.
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/info/FileID</code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "FileID": 0,
+              "FileName": "",
+              "FileDescription": "",
+              "FileNSFW": false,
+              "FileMime": "",
+              "FileWidth": 0,
+              "FileHeight": 0,
+              "FileCreatedDate": "",
+              "FileData": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>FileName</code> (<code>str</code>): The file's name.
+          </li>
+          <li>
+            <code>FileDescription</code> (<code>str</code>): The file's description.
+          </li>
+          <li>
+            <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+          </li>
+          <li>
+            <code>FileMime</code> (<code>str</code>): The file's MIME data.
+          </li>
+          <li>
+            <code>FileWidth</code> (<code>int</code>): The file's width.
+          </li>
+          <li>
+            <code>FileHeight</code> (<code>int</code>): The file's height.
+          </li>
+          <li>
+            <code>FileCreatedDate</code> (<code>str</code>): The file's date of creation.
+          </li>
+          <li>
+            <code>FileData</code> (<code>str</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-embed" class="container content">
+        <h3>GET /iamages/api/embed/.*</h3>
+        <p>
+          Provides an Open Graph-compatible embed and preview page link.
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/embed/FileID</code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+        </ul>
+        <h4>Response (HTML)</h4>
+        <p>
+          Refer to the <a href="https://ogp.me/">Open Graph</a> and <a href="https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/markup">Twitter Cards</a> documentation for more information.
+        </p>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-img" class="container content">
+        <h3>GET /iamages/api/img/.*</h3>
+        <p>
+          Returns an image for the given <code>FileID</code>.
+          <br>
+          <b>
+            Use of this API endpoint is discouraged unless: 
+            <ul>
+              <li>
+                <a href="#root-embed">/iamages/api/embed/.*</a> is incompatible.
+              </li>
+              <li>
+                You want to retrieve the raw image only.
+              </li>
+            </ul>
+          </b>
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/img/FileID</code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+        </ul>
+        <h4>Response (raw image)</h4>
+        <p>
+          Literally a raw image file. 
+          <br>
+          The <code>Content-Type</code> header will be set to the file's <code>FileMime</code>.
+        </p>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-user-info" class="container content">
+        <h3>GET /iamages/api/user/info/.*</h3>
+        <p>
+          Returns all publicly available user information of the given <code>UserName</code>
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/user/info/UserName</code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The user's name.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserInfo": {} 
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The user's name.
+          </li>
+          <li>
+            <code>UserInfo</code> (<code>dict</code>): The user's information.
+            <ul>
+              <li>
+                <code>UserBiography</code> (<code>str/None</code>): The user's biography.
+                <code>UserCreatedDate</code> (<code>str</code>): The user's creation date.
+              </li>
+            </ul>
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>404</code>: The given user could not be found.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-user-files" class="container content">
+        <h3>POST /iamages/api/user/files</h3>
+        <p>
+          Returns the files belonging to a given user.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The files owner's <code>UserName</code>.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The files owner's <code>UserPassword</code>.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserFiles": []
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The files owner's <code>UserName</code>.
+          </li>
+          <li>
+            <code>UserFiles</code> (<code>list</code>): A list of <code>FileID</code>s that belong to the user.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-user-modify" class="container content">
+        <h3>PATCH /iamages/api/user/modify</h3>
+        <p>
+          Modify the given user's information or delete the user.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": "",
+              "Modifications": {
+                "UserBiography": "",
+                "UserPassword": "",
+                "DeleteUser": true
+              }
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The user's name.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The user's password.
+          </li>
+          <li>
+            <code>Modifications</code> (<code>dict</code>): Modifications to apply to the user.
+            <ul>
+              <li>
+                <code>UserBiography</code> (<code>str</code>): The user's new biography.
+              </li>
+              <li>
+                <code>UserPassword</code> (<code>bool</code>): The user's new password.
+              </li>
+              <li>
+                <code>DeleteUser</code> (<code>any</code>): Set to anything to delete user.
+              </li>
+            </ul>
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "Modifications": []
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>int</code>): The user's name.
+          </li>
+          <li>
+            <code>Modifications</code> (<code>list</code>): Modifications applied to the user.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-user-new" class="container content">
+        <h3>PUT /iamages/api/user/new</h3>
+        <p>
+          Create a new user on Iamages.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The new user's name.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The new user's password.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The created user's name.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>403</code>: Could not create the new user (user may have already signed up).
+          </li>
+        </ul>
+      </div>
+      <hr>
       <p>
-        Uploads a file to Iamages.
-        <br><br>
-        <i>Request body type: JSON</i>
-        <br>
-        <code>
-          <pre>
-            {
-              "FileName": "This is a file Name",
-              "FileDescription": "This is a file description",
-              "FileData": "base64-encoded string with header stripped",
-              "UserName": "optional",
-              "UserPassword": "optional"
-            }
-          </pre>
-        </code>
-        <br><br>
-        <i>Response body type: JSON</i>
-        <br>
-        <code>
-          <pre>
-            {
-              "FileIDs": [1, 2, 3, 4, ...]
-            }
-          </pre>
-        </code>
+        The documentation is provided as-is and is subject to change without notice. 
+        You're advised to watch the relevant developer channels for the latest information.
       </p>
-    </article>
-    <hr>
+    </section>
   </body>
 </html>

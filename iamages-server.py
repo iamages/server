@@ -59,7 +59,7 @@ def check_user(UserName, UserPassword):
 
 class RootInfoHandler(tornado.web.RequestHandler):
     def get(self):
-        self.render("api-doc.html")
+            self.render("api-doc.html")
 
 class LatestFilesHandler(tornado.web.RequestHandler):
     def get(self):
@@ -78,7 +78,12 @@ class RandomFileHandler(tornado.web.RequestHandler):
     def get(self):
         total_FileIDs = storedb_cursor.execute("SELECT COUNT(*) FROM Files").fetchone()[0]
         if total_FileIDs > 0:
-            self.redirect("/iamages/api/info/" + str(random.randint(1, total_FileIDs)))
+            successful_FileID = 0
+            while successful_FileID == 0:
+                successful_FileID = random.randint(1, total_FileIDs)
+                if not storedb_cursor.execute("SELECT * From Files WHERE FileID = ?", (successful_FileID,)).fetchone():
+                    successful_FileID = 0
+            self.redirect("/iamages/api/info/" + str(successful_FileID))
         else:
             self.send_error(503)
 
@@ -86,7 +91,7 @@ class FileUploadHandler(tornado.web.RequestHandler):
     def put(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
-            "FileName": None
+            "FileID": None
         }
         if "FileName" in request and "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
             if ((len(request["FileData"]) * 3) / 4 < server_config["max_file_size"]):
@@ -106,7 +111,7 @@ class FileUploadHandler(tornado.web.RequestHandler):
                     if UserID:
                         storedb_cursor.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (FileID, UserID))
                 storedb_connection.commit()
-                response["FileName"] = request["FileName"]
+                response["FileID"] = FileID
                 self.write(response)
             else:
                 self.set_status(413)
@@ -254,14 +259,14 @@ class UserInfoHandler(tornado.web.RequestHandler):
         UserName = self.request.path.split("/")[-1]
         response = {
             "UserName": None,
-            "UserDetails": {}
+            "UserInfo": {}
         }
         if UserName != "":
             response["UserName"] = UserName
             usermeta = storedb_cursor.execute('SELECT UserBiography, UserCreatedDate FROM Users WHERE UserName = ?', (UserName,)).fetchone()
             if usermeta:
-                response["UserDetails"]["UserBiography"] = usermeta[0]
-                response["UserDetails"]["UserCreatedDate"] = usermeta[1]
+                response["UserInfo"]["UserBiography"] = usermeta[0]
+                response["UserInfo"]["UserCreatedDate"] = usermeta[1]
                 self.write(response)
             else:
                 self.send_error(404)
@@ -309,6 +314,15 @@ class UserModifyHandler(tornado.web.RequestHandler):
                             storedb_cursor.execute(basic_query.format(modification), (request["Modifications"][modification],))
                         elif modification == "UserPassword":
                             storedb_cursor.execute(basic_query.format(modification), (bcrypt.hashpw(bytes(request["Modifications"][modification], 'utf-8'), bcrypt.gensalt()),))
+                        elif modification == "DeleteUser":
+                            storedb_cursor.execute("DELETE FROM Users WHERE UserID = ?", (UserID,))
+                            FileIDs = storedb_cursor.execute("SELECT FileID From Files_Users WHERE UserID = ?", (UserID,)).fetchall()
+                            for FileID in FileIDs:
+                                folderpath = os.path.join(FILES_PATH, str(FileID[0]))
+                                if os.path.isdir(folderpath):
+                                    shutil.rmtree(folderpath)
+                                storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (FileID[0],))
+                                storedb_cursor.execute("DELETE FROM Files_Users WHERE FileID = ?", (FileID[0],))
                         storedb_connection.commit()
                         response["Modifications"].append(modification)
                     except:
@@ -359,6 +373,8 @@ app_endpoints = [
 ]
 
 app_settings = {
+    "static_path": os.path.join(IAMAGES_PATH, "assets"),
+    "static_url_prefix": "/iamages/assets/",
     "debug": True,
     "gzip": True,
 }
