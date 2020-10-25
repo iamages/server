@@ -6,8 +6,8 @@
   "keys": {
     "directory": "",
     "files": {
-      "certificate": "",
-      "certificate_key": ""
+      "chain": "",
+      "private": ""
     }
   }
 }

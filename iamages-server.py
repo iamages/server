@@ -382,8 +382,8 @@ application = tornado.web.Application(app_endpoints, **app_settings)
 if "keys" in server_config:
     if server_config["keys"]["directory"] != "":
         ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_ctx.load_cert_chain(os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["certificate"]),
-                                os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["certificate_key"]))
+        ssl_ctx.load_cert_chain(os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"]),
+                                os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"]))
         application.listen(server_config['port'])
         application.listen(server_config["port_secure"], ssl_options=ssl_ctx)
         logging.info("Listening for requests on port {0} and {1}!".format(server_config["port_secure"], server_config["port"]))
