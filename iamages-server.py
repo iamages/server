@@ -1,3 +1,6 @@
+__version__ = "master"
+__copyright__ = "© jkelol111 et al 2020-present"
+
 import base64
 import sqlite3
 import json
@@ -17,6 +20,9 @@ import tornado.ioloop
 logging.basicConfig(format='SERVER | %(asctime)s | %(levelname)s | %(message)s', datefmt='%d/%m/%y %H:%M:%S', level=logging.INFO)
 
 IAMAGES_PATH = os.path.dirname(__file__)
+logging.info("[Iamages API Server version '{0}']".format(__version__))
+logging.info(__copyright__)
+logging.info("IAMAGES_PATH = " + str(IAMAGES_PATH))
 
 logging.info("Starting imgcloud server...")
 logging.info("Loading server configuration file...")
