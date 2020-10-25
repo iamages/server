@@ -19,7 +19,7 @@ import tornado.ioloop
 
 logging.basicConfig(format='SERVER | %(asctime)s | %(levelname)s | %(message)s', datefmt='%d/%m/%y %H:%M:%S', level=logging.INFO)
 
-IAMAGES_PATH = os.path.dirname(__file__)
+IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 logging.info("[Iamages API Server version '{0}']".format(__version__))
 logging.info(__copyright__)
 logging.info("IAMAGES_PATH = " + str(IAMAGES_PATH))
