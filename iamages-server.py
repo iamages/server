@@ -378,7 +378,7 @@ app_endpoints = [
 
 app_settings = {
     "static_path": os.path.join(IAMAGES_PATH, "assets"),
-    "static_url_prefix": "/iamages/assets/",
+    "static_url_prefix": "/iamages/api/private/web-assets/",
     "debug": True,
     "gzip": True,
 }
