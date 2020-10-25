@@ -4,6 +4,7 @@
     <meta type="charset" value="utf-8">
     <title>Iamages API Reference</title>
     <meta type="description" content="Reference for Iamages API.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{static_url("css/bulma.min.css")}}">
   </head>
   <body>
@@ -125,6 +126,7 @@
               "FileName": "",
               "FileDescription": "",
               "FileNSFW": false,
+              "FilePrivate": true,
               "FileData": "",
               "UserName": "",
               "UserPassword": ""
@@ -141,6 +143,9 @@
           </li>
           <li>
             <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+          </li>
+          <li>
+            <code>FilePrivate</code> (<code>bool</code>): The file's Private flag.
           </li>
           <li>
             <code>FileData</code> (<code>str</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
@@ -175,7 +180,13 @@
             <code>400</code>: Missing request data.
           </li>
           <li>
+            <code>401</code>: User authentication failed.
+          </li>
+          <li>
             <code>413</code>: The file's size exceeds the server's configured maximum file size value.
+          </li>
+          <li>
+            <code>415</code>: The file's MIME type is not supported.
           </li>
         </ul>
       </div>
@@ -194,7 +205,8 @@
               "FileID": 0,
               "Modifications": {
                 "FileDescription": "",
-                "FileNSFW": true/false,
+                "FileNSFW": false,
+                "FilePrivate": true,
                 "DeleteFile": any
               }
             }
@@ -219,6 +231,9 @@
               </li>
               <li>
                 <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+              </li>
+              <li>
+                <code>FilePrivate</code> (<code>bool</code>): The file's Private flag.
               </li>
               <li>
                 <code>DeleteFile</code> (<code>any</code>): Set to anything to delete file.

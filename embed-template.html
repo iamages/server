@@ -18,6 +18,7 @@
     <meta name="twitter:description" content="{{FileDescription}}">
     <meta name="twitter:image" content="/iamages/api/img/{{FileID}}">
     <meta name="twitter:image:alt" content="{{FileDescription}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{static_url("css/bulma.min.css")}}">
   </head>
   <body>
@@ -29,22 +30,11 @@
         <br>
         <h2 class="title">{{FileDescription}}</h2>
         <hr>
-        <img src="/iamages/api/img/{{FileID}}" alt="We couldn't fine the file you wanted :(">
+        <img src="/iamages/api/img/{{FileID}}" alt="We couldn't find the file you wanted :(">
         <hr>
         <p>
           Served from Iamages, the open source image sharing platform.
         </p>
-
-        <!-- <div class="card">
-          <div class="card-content">
-            <div class="content">{{FileDescription}}</div>
-          </div>
-          <div class="card-image">
-            <figure class="image">
-              <img src="/iamages/api/img/{{FileID}}" alt="{{FileDescription}}">
-            </figure>
-          </div>
-        </div> -->
       </div>
     </section>
   </body>

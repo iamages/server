@@ -64,6 +64,19 @@ def check_user(UserName, UserPassword):
     else:
         return None
 
+def delete_file(FileID):
+    folderpath = os.path.join(FILES_PATH, str(FileID))
+    if os.path.isdir(folderpath):
+        shutil.rmtree(folderpath)
+    storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (FileID,))
+    storedb_cursor.execute("DELETE FROM Files_Users WHERE FileID = ?", (FileID,))
+
+def check_private_file(FileID, UserID):
+    if int(FileID) == storedb_cursor.execute("SELECT Files.FileID FROM Files INNER JOIN Files_Users ON Files.FileID = Files_Users.FileID WHERE Files_Users.FileID = ? AND Files_Users.UserID = ?", (FileID, UserID)).fetchone()[0]:
+        return True
+    else:
+        return False
+
 class RootInfoHandler(tornado.web.RequestHandler):
     def get(self):
             self.render("api-doc.html")
@@ -73,12 +86,9 @@ class LatestFilesHandler(tornado.web.RequestHandler):
         response = {
             "FileIDs": []
         }
-        try: 
-            files = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC LIMIT 10").fetchall()
-            for file in files:
-                response["FileIDs"].append(file[0])
-        except:
-            logging.exception("Failed to get latest list!")
+        files = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC LIMIT 10").fetchall()
+        for file in files:
+            response["FileIDs"].append(file[0])
         self.write(response)
 
 class RandomFileHandler(tornado.web.RequestHandler):
@@ -100,7 +110,10 @@ class FileUploadHandler(tornado.web.RequestHandler):
         response = {
             "FileID": None
         }
-        if "FileName" in request and "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
+
+        UserID = None
+
+        def handle_upload():
             if ((len(request["FileData"]) * 3) / 4 < server_config["max_file_size"]):
                 storedb_cursor.execute("INSERT INTO Files (FileName, FileDescription, FileNSFW, FileCreatedDate) VALUES (?, ?, ?, datetime('now'))", (request["FileName"], request["FileDescription"], request["FileNSFW"]))
                 FileID = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC").fetchone()[0]
@@ -110,19 +123,40 @@ class FileUploadHandler(tornado.web.RequestHandler):
                 filepath = os.path.join(folderpath, request["FileName"])
                 with open(filepath, "wb") as file:
                     file.write(base64.b64decode(request["FileData"]))
-                storedb_cursor.execute("UPDATE Files SET FileMime = ? WHERE FileID = ?", (magic.from_file(filepath, mime=True), FileID))
-                with Image.open(filepath) as img:
-                    storedb_cursor.execute("UPDATE Files SET FileWidth = ?, FileHeight = ? WHERE FileID = ?", (img.size[0], img.size[1], FileID))
-                if "UserName" in request and "UserPassword" in request:
-                    UserID = check_user(request["UserName"], request["UserPassword"])
+                FileMime = magic.from_file(filepath, mime=True)
+                if FileMime in ["image/jpeg", "image/png", "image/gif"]:
+                    storedb_cursor.execute("UPDATE Files SET FileMime = ? WHERE FileID = ?", (FileMime, FileID))
+                    with Image.open(filepath) as img:
+                        storedb_cursor.execute("UPDATE Files SET FileWidth = ?, FileHeight = ? WHERE FileID = ?", (img.size[0], img.size[1], FileID))
                     if UserID:
                         storedb_cursor.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (FileID, UserID))
+                        if "FilePrivate" in request:
+                            storedb_cursor.execute("UPDATE Files SET FilePrivate = ? WHERE FileID = ?", (request["FilePrivate"], FileID))
+                        else:
+                            storedb_cursor.execute("UPDATE Files SET FilePrivate = ? WHERE FileID = ?", (False, FileID))
+                    else:
+                        storedb_cursor.execute("UPDATE Files SET FilePrivate = ? WHERE FileID = ?", (False, FileID))
+                else:
+                    delete_file(FileID)
+                    self.set_status(415)
+                    FileID = None
                 storedb_connection.commit()
                 response["FileID"] = FileID
                 self.write(response)
             else:
                 self.set_status(413)
                 self.write(response)
+
+        if "FileName" in request and "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
+            if "UserName" in request and "UserPassword" in request:
+                UserID = check_user(request["UserName"], request["UserPassword"])
+                if UserID:
+                    handle_upload()
+                else:
+                    self.set_status(401)
+                    self.write(response)
+            else:
+                handle_upload()
         else:
             self.set_status(400)
             self.write(response)
@@ -142,13 +176,10 @@ class FileModifyHandler(tornado.web.RequestHandler):
                     base_query = "UPDATE Files SET {0} = ? WHERE FileID = " + str(FileID)
                     for modification in request["Modifications"]:
                         try:
-                            if modification == "FileDescription" or modification == "FileNSFW":
+                            if modification in ["FileDescription", "FileNSFW", "FilePrivate"]:
                                 storedb_cursor.execute(base_query.format(modification), (request["Modifications"][modification],))
                             elif modification == "DeleteFile":
-                                folderpath = os.path.join(FILES_PATH, str(FileID))
-                                if os.path.isdir(folderpath):
-                                    shutil.rmtree(folderpath)
-                                storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (request["FileID"],))
+                                delete_file(FileID)
                             storedb_connection.commit()
                             response["Modifications"].append(modification)
                         except:
@@ -168,71 +199,135 @@ class FileModifyHandler(tornado.web.RequestHandler):
                         
 
 class FileInfoHandler(tornado.web.RequestHandler):
-    def get(self):
-        FileID = self.request.path.split("/")[-1]
-        response = {
+    def prepare(self):
+        self.response = {
             "FileID": None,
             "FileName": None,
             "FileDescription": None,
             "FileNSFW": None,
+            "FilePrivate": None,
             "FileMime": None,
             "FileWidth": None,
             "FileHeight": None,
             "FileCreatedDate": None,
             "FileData": None
         }
+
+    def set_response(self, FileID, filemeta):
+        self.response["FileID"] = filemeta[0]
+        self.response["FileName"] = filemeta[1]
+        self.response["FileDescription"] = filemeta[2]
+        self.response["FileNSFW"] = bool(filemeta[3])
+        self.response["FilePrivate"] = bool(filemeta[4])
+        self.response["FileMime"] = filemeta[5]
+        self.response["FileWidth"] = filemeta[6]
+        self.response["FileHeight"] = filemeta[7]
+        self.response["FileCreatedDate"] = filemeta[8]
+        filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[1]))
+        if os.path.isfile(filepath):
+            with open(filepath, 'rb') as file:
+                self.response["FileData"] = base64.b64encode(file.read()).decode('utf-8')
+            self.write(self.response)
+
+    def get(self, FileID):
         if FileID != "":
             filemeta = storedb_cursor.execute("SELECT * FROM Files WHERE FileID = ?", (FileID,)).fetchone()
             if filemeta:
-                response["FileID"] = filemeta[0]
-                response["FileName"] = filemeta[1]
-                response["FileDescription"] = filemeta[2]
-                response["FileNSFW"] = bool(filemeta[3])
-                response["FileMime"] = filemeta[4]
-                response["FileWidth"] = filemeta[5]
-                response["FileHeight"] = filemeta[6]
-                response["FileCreatedDate"] = filemeta[7]
-                filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[1]))
-                if not os.path.isfile(filepath):
-                    self.set_status(404)
-                    self.write(response)
+                if not bool(filemeta[4]):
+                    self.set_response(int(FileID), filemeta)
+                    if not self.response["FileData"]:
+                        self.set_status(404)
+                        self.write(self.response)
+                    else:
+                        self.write(self.response)
                 else:
-                    with open(filepath, 'rb') as file:
-                        response["FileData"] = base64.b64encode(file.read()).decode('utf-8')
-                self.write(response)
+                    self.set_status(401)
+                    self.write(self.response)
             else:
                 self.set_status(404)
-                response["FileID"] = FileID
-                self.write(response)
+                self.write(self.response)
         else:
             self.set_status(400)
-            self.write(response)
+            self.write(self.response)
+
+    def post(self, FileID):
+        if FileID != "":
+            request = tornado.escape.json_decode(self.request.body)
+            if "UserName" in request and "UserPassword" in request:
+                UserID = check_user(request["UserName"], request["UserPassword"])
+                if UserID:
+                    if check_private_file(FileID, UserID):
+                        filemeta = storedb_cursor.execute("SELECT * FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+                        self.set_response(FileID, filemeta)
+                        if not self.response["FileData"]:
+                            self.set_status(404)
+                            self.write(self.response)
+                        else:
+                            self.write(self.response)
+                    else:
+                        self.set_status(404)
+                        self.write(self.response)
+                else:
+                    self.set_status(401)
+                    self.write(self.response)
+            else:
+                self.set_status(400)
+                self.write(self.response)
+        else:
+            self.set_status(400)
+            self.write(self.response)
 
 class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
-    def get(self):
-        FileID = self.request.path.split("/")[-1]
+    def get(self, FileID):
         if FileID != "":
-            filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+            filemeta = storedb_cursor.execute("SELECT FileName, FileMime, FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
             if filemeta:
-                filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
-                if os.path.isfile(filepath):
-                    self.set_header('Content-Type', filemeta[1])
-                    with open(filepath, 'rb') as file:
-                        self.write(file.read())
+                if not bool(filemeta[2]):
+                    filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
+                    if os.path.isfile(filepath):
+                        self.set_header('Content-Type', filemeta[1])
+                        with open(filepath, 'rb') as file:
+                            self.write(file.read())
+                    else:
+                        self.send_error(404)
                 else:
-                    self.send_error(404)
+                    self.send_error(401)
             else:
                 self.send_error(404)
         else:
             self.send_error(400)
 
+    def post(self, FileID):
+        if FileID != "":
+            request = tornado.escape.json_decode(self.request.body)
+            if "UserName" in request and "UserPassword" in request:
+                UserID = check_user(request["UserName"], request["UserPassword"])
+                if UserID:
+                    if check_private_file(FileID, UserID):
+                        filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+                        if filemeta:
+                            filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
+                            if os.path.isfile(filepath):
+                                self.set_header('Content-Type', filemeta[1])
+                                with open(filepath, 'rb') as file:
+                                    self.write(file.read())
+                        else:
+                            self.send_error(404)
+                    else:
+                        self.send_error(404)
+                else:
+                    self.send_error(401)
+            else:
+                self.send_error(400)
+        else:
+            self.send_error(400)
+
 class EmbedFileHandler(tornado.web.RequestHandler):
-    def get(self):
-        try:
-            FileID = self.request.path.split("/")[-1]
-            if FileID != "":
-                filemeta = storedb_cursor.execute("SELECT FileName, FileDescription, FileMime, FileWidth, FileHeight FROM Files WHERE FileID = ?", (FileID,)).fetchone()
-                if filemeta:
+    def get(self, FileID):
+        if FileID != "":
+            filemeta = storedb_cursor.execute("SELECT FileName, FileDescription, FileMime, FileWidth, FileHeight, FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+            if filemeta:
+                if not bool(filemeta[5]):
                     self.render(
                         "embed-template.html",
                         title=filemeta[0] + " - on Iamages",
@@ -243,24 +338,22 @@ class EmbedFileHandler(tornado.web.RequestHandler):
                         FileHeight=filemeta[4]
                     )
                 else:
-                    self.send_error(404)
+                    self.render(
+                        "embed-template.html",
+                        title="Private File from Iamages",
+                        FileDescription="You're not allowed to view this file.\nContact the owner.",
+                        FileID=0,
+                        FileMime="",
+                        FileWidth=0,
+                        FileHeight=0
+                    )
             else:
-                self.send_error(400)
-        except:
-            logging.exception('Something wrong!')
-            self.render(
-                "embed-template.html",
-                title="Error - Iamages",
-                FileDescription=":(",
-                FileID=0,
-                FileMime="",
-                FileWidth=0,
-                FileHeight=0
-            )
+                self.send_error(404)
+        else:
+            self.send_error(400)
 
 class UserInfoHandler(tornado.web.RequestHandler):
-    def get(self):
-        UserName = self.request.path.split("/")[-1]
+    def get(self, UserName):
         response = {
             "UserName": None,
             "UserInfo": {}
@@ -286,9 +379,9 @@ class UserFilesHandler(tornado.web.RequestHandler):
             "UserFiles": None 
         }
         if "UserName" in request and "UserPassword" in request:
-            userid = check_user(request["UserName"], request["UserPassword"])
-            if userid:
-                files = storedb_cursor.execute("SELECT FileID FROM Files_Users INNER JOIN Users ON Files_Users.UserID = Users.UserID WHERE Users.UserID = ?", (userid,)).fetchall()
+            UserID = check_user(request["UserName"], request["UserPassword"])
+            if UserID:
+                files = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE UserID = ?", (UserID,)).fetchall()
                 response["UserName"] = request["UserName"]
                 response["UserFiles"] = []
                 for file in files:
@@ -314,7 +407,7 @@ class UserModifyHandler(tornado.web.RequestHandler):
                 basic_query = "UPDATE Users SET {0} = ? WHERE UserID = " + str(UserID)
                 for modification in request["Modifications"]:
                     try:
-                        if modification == "UserBiography" or modification == "UserName":
+                        if modification in ["UserBiography", "UserName"]:
                             storedb_cursor.execute(basic_query.format(modification), (request["Modifications"][modification],))
                         elif modification == "UserPassword":
                             storedb_cursor.execute(basic_query.format(modification), (bcrypt.hashpw(bytes(request["Modifications"][modification], 'utf-8'), bcrypt.gensalt()),))
@@ -322,11 +415,7 @@ class UserModifyHandler(tornado.web.RequestHandler):
                             storedb_cursor.execute("DELETE FROM Users WHERE UserID = ?", (UserID,))
                             FileIDs = storedb_cursor.execute("SELECT FileID From Files_Users WHERE UserID = ?", (UserID,)).fetchall()
                             for FileID in FileIDs:
-                                folderpath = os.path.join(FILES_PATH, str(FileID[0]))
-                                if os.path.isdir(folderpath):
-                                    shutil.rmtree(folderpath)
-                                storedb_cursor.execute("DELETE FROM Files WHERE FileID = ?", (FileID[0],))
-                                storedb_cursor.execute("DELETE FROM Files_Users WHERE FileID = ?", (FileID[0],))
+                                delete_file(FileID[0])
                         storedb_connection.commit()
                         response["Modifications"].append(modification)
                     except:
@@ -360,6 +449,10 @@ class NewUserHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
+class AnnoucementsRequestHandler(tornado.web.RequestHandler):
+    def get(self):
+        pass
+
 
 app_endpoints = [
     (r'/iamages/api/?', RootInfoHandler),
@@ -367,10 +460,10 @@ app_endpoints = [
     (r'/iamages/api/random/?', RandomFileHandler),
     (r'/iamages/api/upload/?', FileUploadHandler),
     (r'/iamages/api/modify/?', FileModifyHandler),
-    (r'/iamages/api/info/.*', FileInfoHandler),
-    (r'/iamages/api/embed/.*', EmbedFileHandler),
-    (r'/iamages/api/img/.*', EmbedImgGeneratorHandler),
-    (r'/iamages/api/user/info/.*', UserInfoHandler),
+    (r'/iamages/api/info/(.*\d)/?', FileInfoHandler),
+    (r'/iamages/api/embed/(.*\d)/?', EmbedFileHandler),
+    (r'/iamages/api/img/(.*\d)/?', EmbedImgGeneratorHandler),
+    (r'/iamages/api/user/info/(.*)/?', UserInfoHandler),
     (r'/iamages/api/user/files/?', UserFilesHandler),
     (r'/iamages/api/user/modify/?', UserModifyHandler),
     (r'/iamages/api/user/new/?', NewUserHandler)
