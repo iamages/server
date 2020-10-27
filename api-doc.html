@@ -20,6 +20,40 @@
       </div>
       <hr>
       <div class="container content">
+        <h3>Important notes</h3>
+        <p>
+          Thank you for considering Iamages. We hope you can find this service useful for your needs.
+          <br>
+          That said, before we begin developing with the Iamages platform, we'd like you to be aware of a few things:
+        </p>
+        <ul>
+          <li>
+            We only support images with mime types:
+            <ul>
+              <li>
+                <code>image/jpeg</code>
+              </li>
+              <li>
+                <code>image/png</code>
+              </li>
+              <li>
+                <code>image/gif</code>
+              </li>
+            </ul>
+            Any other images uploaded will be rejected.
+          </li>
+          <li>
+            By using Iamages' API or related services, you hereby agree to the <a href="/iamages/api/private/tos">Terms of Service</a> and <a href="/iamages/api/private/privacy">Privacy Policy.</a> 
+          </li>
+          <li>
+            If methods return response code <code>500</code>, please contact this instance's owner: 
+            <br>
+            <a href="{{instance_owner_contact}}" class="button is-link">contact {{instance_owner_name}}</a>
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div class="container content">
         <h3>API endpoints</h3>
         <ul>
           <li>
@@ -145,7 +179,7 @@
             <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
           </li>
           <li>
-            <code>FilePrivate</code> (<code>bool</code>): The file's Private flag.
+            <code>FilePrivate</code> (<code>bool</code>): The file's Private flag (will only be applied with <code>UserName</code> and <code>UserPassword</code>)
           </li>
           <li>
             <code>FileData</code> (<code>str</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
@@ -384,13 +418,15 @@
       <div id="root-img" class="container content">
         <h3>GET /iamages/api/img/.*</h3>
         <p>
+          <b>If you have the user's <code>UserName</code> and <code>UserPassword</code>, use the <code>POST</code> endpoint below.</b>
+          <br>
           Returns an image for the given <code>FileID</code>.
           <br>
           <b>
             Use of this API endpoint is discouraged unless: 
             <ul>
               <li>
-                <a href="#root-embed">/iamages/api/embed/.*</a> is incompatible.
+                <a href="#root-embed">/iamages/api/embed/.*</a> is incompatible with your use case (private file, etc.).
               </li>
               <li>
                 You want to retrieve the raw image only.
@@ -421,6 +457,61 @@
           </li>
           <li>
             <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: Private file, requires authentication (see <code>POST /iamages/api/img/.*</code> below).
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+        <h3>POST /iamages/api/img/.*</h3>
+        <p>
+          <b>Use this when you have an user's <code>UserName</code> and <code>UserPassword</code>.</b>
+          <br>
+          Returns an image for the given <code>FileID</code>.
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/img/FileID</code>
+        </pre>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+          <li>
+            <code>UserName</code> (<code>str</code>): The files owner's <code>UserName</code>.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The files owner's <code>UserPassword</code>.
+          </li>
+        </ul>
+        <h4>Response (raw image)</h4>
+        <p>
+          Literally a raw image file. 
+          <br>
+          The <code>Content-Type</code> header will be set to the file's <code>FileMime</code>.
+        </p>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
           </li>
           <li>
             <code>404</code>: The given file could not be found.

@@ -1,4 +1,8 @@
 {
+  "instance_owner": {
+    "name": "jkelol111",
+    "contact": "mailto:jkelol111@gmail.com"
+  },
   "port": 80,
   "port_secure": 443,
   "max_file_size": 10485760,

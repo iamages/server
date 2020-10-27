@@ -2,10 +2,12 @@ __version__ = "master"
 __copyright__ = "© jkelol111 et al 2020-present"
 
 import base64
-import sqlite3
+from pysqlcipher3 import dbapi2 as sqlite3
+# import sqlite3
 import json
 import os
-import sys
+import getpass
+import argparse
 import logging
 import bcrypt
 import ssl
@@ -17,6 +19,10 @@ import tornado.web
 import tornado.escape
 import tornado.ioloop
 
+argument_parser = argparse.ArgumentParser(description="Iamages Server")
+argument_parser.add_argument("config_path", metavar="config_path", type=str, help="The path to the server's JSON configuration file.")
+arguments = argument_parser.parse_args()
+
 logging.basicConfig(format='SERVER | %(asctime)s | %(levelname)s | %(message)s', datefmt='%d/%m/%y %H:%M:%S', level=logging.INFO)
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -27,7 +33,7 @@ logging.info("IAMAGES_PATH = " + str(IAMAGES_PATH))
 logging.info("Starting imgcloud server...")
 logging.info("Loading server configuration file...")
 try:
-    server_config = json.load(open(os.path.join(os.getcwd(), sys.argv[1]), "r"))
+    server_config = json.load(open(os.path.join(os.getcwd(), arguments.config_path), "r"))
     logging.info("Loaded server configuration file!")
 except Exception:
     logging.exception("Server config load failed! Halting...", exc_info=True)
@@ -39,14 +45,36 @@ if not os.path.isdir(server_config["storage_directory"]):
 FILESDB_PATH = os.path.join(server_config["storage_directory"], "store.db")
 
 logging.info("Connecting to storage database...")
-storedb_connection = sqlite3.connect(FILESDB_PATH)
+storedb_connection = sqlite3.connect(FILESDB_PATH, )
 storedb_cursor = storedb_connection.cursor()
 
-if storedb_cursor.execute("SELECT name FROM sqlite_master").fetchall() == []:
-    logging.info("Storage database is new, creating tables...")
-    with open(os.path.join(IAMAGES_PATH, "store.sql"), "r") as query:
-        storedb_cursor.executescript(query.read())
+try:
+    empty = storedb_cursor.execute("SELECT name FROM sqlite_master").fetchall()
 
+    if empty == []:
+        logging.info("Storage database is new, creating tables...")
+        storedb_cursor.execute("PRAGMA key = 'temppassword123'")
+        with open(os.path.join(IAMAGES_PATH, "store.sql"), "r") as query:
+            storedb_cursor.executescript(query.read())
+        pwd0 = getpass.getpass("Input new database password (input will not show): ")
+        pwd1 = getpass.getpass("Re-enter new database password (input will not show): ")
+        if pwd0 == pwd1:
+            storedb_cursor.execute("PRAGMA rekey = {0}".format(pwd0))
+        else:
+            logging.critical("Newly inputted passwords do not match! Removing database and halting...")
+            os.remove(FILESDB_PATH)
+            exit()
+    else:
+        logging.warning("Database seems strange... halting!")
+        exit()
+except:
+    storedb_cursor.execute("PRAGMA key = {0}".format(getpass.getpass("Input database password (input will not show): ")))
+    try:
+        storedb_cursor.execute("SELECT name FROM sqlite_master").fetchall()
+    except:
+        logging.error("The inputted password is incorrect! Halting...")
+        exit()
+        
 logging.info("Connected to storage database!")
 
 FILES_PATH = os.path.join(server_config["storage_directory"], "files")
@@ -73,13 +101,21 @@ def delete_file(FileID):
 
 def check_private_file(FileID, UserID):
     if int(FileID) == storedb_cursor.execute("SELECT Files.FileID FROM Files INNER JOIN Files_Users ON Files.FileID = Files_Users.FileID WHERE Files_Users.FileID = ? AND Files_Users.UserID = ?", (FileID, UserID)).fetchone()[0]:
-        return True
+        return FileID
     else:
-        return False
+        return None
 
 class RootInfoHandler(tornado.web.RequestHandler):
     def get(self):
-            self.render("api-doc.html")
+        self.render("api-doc.html", instance_owner_name=server_config["instance_owner"]["name"], instance_owner_contact=server_config["instance_owner"]["contact"])
+
+class TOSHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.render("tos.html")
+
+class PrivacyPolicyHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.render("privacy.html")
 
 class LatestFilesHandler(tornado.web.RequestHandler):
     def get(self):
@@ -128,6 +164,7 @@ class FileUploadHandler(tornado.web.RequestHandler):
                     storedb_cursor.execute("UPDATE Files SET FileMime = ? WHERE FileID = ?", (FileMime, FileID))
                     with Image.open(filepath) as img:
                         storedb_cursor.execute("UPDATE Files SET FileWidth = ?, FileHeight = ? WHERE FileID = ?", (img.size[0], img.size[1], FileID))
+                        img.save(filepath)
                     if UserID:
                         storedb_cursor.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (FileID, UserID))
                         if "FilePrivate" in request:
@@ -171,8 +208,8 @@ class FileModifyHandler(tornado.web.RequestHandler):
         if "UserName" in request and "UserPassword" in request and "FileID" in request and "Modifications" in request:
             UserID = check_user(request["UserName"], request["UserPassword"])
             if UserID:
-                FileID = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE FileID = ? AND UserID = ?", (request["FileID"], UserID)).fetchone()[0]
-                if FileID == request["FileID"]:
+                FileID = check_private_file(request["FileID"], UserID)
+                if FileID == request["FileID"]:     
                     base_query = "UPDATE Files SET {0} = ? WHERE FileID = " + str(FileID)
                     for modification in request["Modifications"]:
                         try:
@@ -466,12 +503,14 @@ app_endpoints = [
     (r'/iamages/api/user/info/(.*)/?', UserInfoHandler),
     (r'/iamages/api/user/files/?', UserFilesHandler),
     (r'/iamages/api/user/modify/?', UserModifyHandler),
-    (r'/iamages/api/user/new/?', NewUserHandler)
+    (r'/iamages/api/user/new/?', NewUserHandler),
+    (r'/iamages/api/private/tos/?', TOSHandler),
+    (r'/iamages/api/private/privacy/?', PrivacyPolicyHandler)
 ]
 
 app_settings = {
     "static_path": os.path.join(IAMAGES_PATH, "assets"),
-    "static_url_prefix": "/iamages/api/private/web-assets/",
+    "static_url_prefix": "/iamages/api/private/assets/",
     "debug": True,
     "gzip": True,
 }
