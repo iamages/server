@@ -56,13 +56,16 @@ try:
         storedb_cursor.execute("PRAGMA key = 'temppassword123'")
         with open(os.path.join(IAMAGES_PATH, "store.sql"), "r") as query:
             storedb_cursor.executescript(query.read())
-        pwd0 = getpass.getpass("Input new database password (input will not show): ")
-        pwd1 = getpass.getpass("Re-enter new database password (input will not show): ")
-        if pwd0 == pwd1:
-            storedb_cursor.execute("PRAGMA rekey = {0}".format(pwd0))
+        pwd = [
+            getpass.getpass("Input new database password (input will not show): "),
+            getpass.getpass("Re-enter new database password (input will not show): ")
+        ]
+        if pwd[0] == pwd[1]:
+            storedb_cursor.execute("PRAGMA rekey = {0}".format(pwd[1]))
         else:
             logging.critical("Newly inputted passwords do not match! Removing database and halting...")
-            os.remove(FILESDB_PATH)
+            if os.path.isfile(FILESDB_PATH):
+                os.remove(FILESDB_PATH)
             exit()
     else:
         logging.warning("Database seems strange... halting!")
