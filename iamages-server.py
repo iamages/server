@@ -489,11 +489,6 @@ class NewUserHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
-class AnnoucementsRequestHandler(tornado.web.RequestHandler):
-    def get(self):
-        pass
-
-
 app_endpoints = [
     (r'/iamages/api/?', RootInfoHandler),
     (r'/iamages/api/latest/?', LatestFilesHandler),

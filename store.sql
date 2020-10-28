@@ -20,8 +20,3 @@ CREATE TABLE Users (
     UserBiography TEXT,
     UserCreatedDate TEXT
 );
-CREATE TABLE Downtimes (
-    Announcement TEXT,
-    AnnouncementStart TEXT,
-    AnnoucementEnd TEXT
-);
