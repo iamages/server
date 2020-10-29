@@ -13,6 +13,8 @@ import bcrypt
 import ssl
 import magic
 import random
+import string
+import mimetypes
 import shutil
 from PIL import Image
 import tornado.web
@@ -154,20 +156,22 @@ class FileUploadHandler(tornado.web.RequestHandler):
 
         def handle_upload():
             if ((len(request["FileData"]) * 3) / 4 < server_config["max_file_size"]):
-                storedb_cursor.execute("INSERT INTO Files (FileName, FileDescription, FileNSFW, FileCreatedDate) VALUES (?, ?, ?, datetime('now'))", (request["FileName"], request["FileDescription"], request["FileNSFW"]))
+                storedb_cursor.execute("INSERT INTO Files (FileDescription, FileNSFW, FileCreatedDate) VALUES (?, ?, datetime('now'))", (request["FileDescription"], request["FileNSFW"]))
                 FileID = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC").fetchone()[0]
                 folderpath = os.path.join(FILES_PATH, str(FileID))
                 if not os.path.isdir(folderpath):
                     os.makedirs(folderpath)
-                filepath = os.path.join(folderpath, request["FileName"])
+                filepath = os.path.join(folderpath, "unprocessed.image")
                 with open(filepath, "wb") as file:
                     file.write(base64.b64decode(request["FileData"]))
                 FileMime = magic.from_file(filepath, mime=True)
                 if FileMime in ["image/jpeg", "image/png", "image/gif"]:
                     storedb_cursor.execute("UPDATE Files SET FileMime = ? WHERE FileID = ?", (FileMime, FileID))
+                    random_filename = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + mimetypes.guess_extension(FileMime)
                     with Image.open(filepath) as img:
-                        storedb_cursor.execute("UPDATE Files SET FileWidth = ?, FileHeight = ? WHERE FileID = ?", (img.size[0], img.size[1], FileID))
-                        img.save(filepath)
+                        storedb_cursor.execute("UPDATE Files SET FileName = ?, FileWidth = ?, FileHeight = ? WHERE FileID = ?", (random_filename, img.size[0], img.size[1], FileID))
+                        img.save(os.path.join(folderpath, random_filename), save_all=True)
+                    os.remove(filepath)
                     if UserID:
                         storedb_cursor.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (FileID, UserID))
                         if "FilePrivate" in request:
@@ -187,7 +191,7 @@ class FileUploadHandler(tornado.web.RequestHandler):
                 self.set_status(413)
                 self.write(response)
 
-        if "FileName" in request and "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
+        if "FileData" in request and "FileNSFW" in request and "FileDescription" in request:
             if "UserName" in request and "UserPassword" in request:
                 UserID = check_user(request["UserName"], request["UserPassword"])
                 if UserID:
@@ -242,20 +246,17 @@ class FileInfoHandler(tornado.web.RequestHandler):
     def prepare(self):
         self.response = {
             "FileID": None,
-            "FileName": None,
             "FileDescription": None,
             "FileNSFW": None,
             "FilePrivate": None,
             "FileMime": None,
             "FileWidth": None,
             "FileHeight": None,
-            "FileCreatedDate": None,
-            "FileData": None
+            "FileCreatedDate": None
         }
 
     def set_response(self, FileID, filemeta):
         self.response["FileID"] = filemeta[0]
-        self.response["FileName"] = filemeta[1]
         self.response["FileDescription"] = filemeta[2]
         self.response["FileNSFW"] = bool(filemeta[3])
         self.response["FilePrivate"] = bool(filemeta[4])
@@ -263,11 +264,6 @@ class FileInfoHandler(tornado.web.RequestHandler):
         self.response["FileWidth"] = filemeta[6]
         self.response["FileHeight"] = filemeta[7]
         self.response["FileCreatedDate"] = filemeta[8]
-        filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[1]))
-        if os.path.isfile(filepath):
-            with open(filepath, 'rb') as file:
-                self.response["FileData"] = base64.b64encode(file.read()).decode('utf-8')
-            self.write(self.response)
 
     def get(self, FileID):
         if FileID != "":

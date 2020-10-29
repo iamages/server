@@ -160,7 +160,6 @@
         <pre>
           <code>
             {
-              "FileName": "",
               "FileDescription": "",
               "FileNSFW": false,
               "FilePrivate": true,
@@ -172,9 +171,6 @@
         </pre>
         <h4>Glossary (Request)</h4>
         <ul>
-          <li>
-            <code>FileName</code> (<code>str</code>): The file's name.
-          </li>
           <li>
             <code>FileDescription</code> (<code>str</code>): The file's description.
           </li>
@@ -316,6 +312,8 @@
       <div id="root-info" class="container content">
         <h3>GET /iamages/api/info/.*</h3>
         <p>
+          <b>If you have the user's <code>UserName</code> and <code>UserPassword</code>, use the <code>POST</code> endpoint below.</b>
+          <br>
           Returns all publicly available metadata about the given <code>FileID</code>.
         </p>
         <h4>Request (URL argument)</h4>
@@ -333,22 +331,17 @@
           <code>
             {
               "FileID": 0,
-              "FileName": "",
               "FileDescription": "",
               "FileNSFW": false,
               "FileMime": "",
               "FileWidth": 0,
               "FileHeight": 0,
-              "FileCreatedDate": "",
-              "FileData": ""
+              "FileCreatedDate": ""
             }
           </code>
         </pre>
         <h4>Glossary (Response)</h4>
         <ul>
-          <li>
-            <code>FileName</code> (<code>str/None</code>): The file's name.
-          </li>
           <li>
             <code>FileDescription</code> (<code>str/None</code>): The file's description.
           </li>
@@ -367,8 +360,83 @@
           <li>
             <code>FileCreatedDate</code> (<code>str/None</code>): The file's date of creation.
           </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
           <li>
-            <code>FileData</code> (<code>str/None</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>404</code>: The given file could not be found.
+          </li>
+        </ul>
+        <h3>POST /iamages/api/info/.*</h3>
+        <p>
+          <b>Use this when you have an user's <code>UserName</code> and <code>UserPassword</code>.</b>
+          <br>
+          Returns an image for the given <code>FileID</code>.
+        </p>
+        <h4>Request (URL argument)</h4>
+        <pre>
+          <code>/iamages/api/info/FileID</code>
+        </pre>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>FileID</code> (<code>int</code>): The file's unique ID.
+          </li>
+          <li>
+            <code>UserName</code> (<code>str</code>): The files owner's <code>UserName</code>.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The files owner's <code>UserPassword</code>.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "FileID": 0,
+              "FileDescription": "",
+              "FileNSFW": false,
+              "FileMime": "",
+              "FileWidth": 0,
+              "FileHeight": 0,
+              "FileCreatedDate": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>FileDescription</code> (<code>str/None</code>): The file's description.
+          </li>
+          <li>
+            <code>FileNSFW</code> (<code>bool/None</code>): The file's NSFW flag.
+          </li>
+          <li>
+            <code>FileMime</code> (<code>str/None</code>): The file's MIME data.
+          </li>
+          <li>
+            <code>FileWidth</code> (<code>int/None</code>): The file's width.
+          </li>
+          <li>
+            <code>FileHeight</code> (<code>int/None</code>): The file's height.
+          </li>
+          <li>
+            <code>FileCreatedDate</code> (<code>str/None</code>): The file's date of creation.
           </li>
         </ul>
         <h4>Response codes</h4>
@@ -378,6 +446,9 @@
           </li>
           <li>
             <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
           </li>
           <li>
             <code>404</code>: The given file could not be found.
