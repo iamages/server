@@ -173,9 +173,13 @@ class FileUploadHandler(tornado.web.RequestHandler):
                 if FileMime in ["image/jpeg", "image/png", "image/gif"]:
                     storedb_cursor.execute("UPDATE Files SET FileMime = ? WHERE FileID = ?", (FileMime, FileID))
                     random_filename = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + mimetypes.guess_extension(FileMime)
+                    new_filepath = os.path.join(folderpath, random_filename)
                     with Image.open(filepath) as img:
                         storedb_cursor.execute("UPDATE Files SET FileName = ?, FileWidth = ?, FileHeight = ? WHERE FileID = ?", (random_filename, img.size[0], img.size[1], FileID))
-                        img.save(os.path.join(folderpath, random_filename), save_all=True)
+                        if FileMime == "image/gif":
+                            img.save(new_filepath, save_all=True)
+                        else:
+                            img.save(new_filepath)
                     os.remove(filepath)
                     if UserID:
                         storedb_cursor.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (FileID, UserID))
