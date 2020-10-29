@@ -271,11 +271,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
             if filemeta:
                 if not bool(filemeta[4]):
                     self.set_response(int(FileID), filemeta)
-                    if not self.response["FileData"]:
-                        self.set_status(404)
-                        self.write(self.response)
-                    else:
-                        self.write(self.response)
+                    self.write(self.response)
                 else:
                     self.set_status(401)
                     self.write(self.response)
@@ -295,11 +291,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
                     if check_private_file(FileID, UserID):
                         filemeta = storedb_cursor.execute("SELECT * FROM Files WHERE FileID = ?", (FileID,)).fetchone()
                         self.set_response(FileID, filemeta)
-                        if not self.response["FileData"]:
-                            self.set_status(404)
-                            self.write(self.response)
-                        else:
-                            self.write(self.response)
+                        self.write(self.response)
                     else:
                         self.set_status(404)
                         self.write(self.response)
