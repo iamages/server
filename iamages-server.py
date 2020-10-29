@@ -114,7 +114,7 @@ class RootInfoHandler(tornado.web.RequestHandler):
 
 class TOSHandler(tornado.web.RequestHandler):
     def get(self):
-        self.render("tos.html")
+        self.render("tos.html", instance_owner_name=server_config["instance_owner"]["name"], instance_owner_contact=server_config["instance_owner"]["contact"])
 
 class PrivacyPolicyHandler(tornado.web.RequestHandler):
     def get(self):
@@ -489,6 +489,23 @@ class NewUserHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
+class CheckUserHandler(tornado.web.RequestHandler):
+    def post(self):
+        request = tornado.escape.json_decode(self.request.body)
+        response = {
+            "UserName": None
+        }
+        if "UserName" in request and "UserPassword" in request:
+            if check_user(request["UserName"], request["UserPassword"]):
+                response["UserName"] = request["UserName"]
+                self.write(response)
+            else:
+                self.set_status(401)
+                self.write(response)
+        else:
+            self.set_status(400)
+            self.write(response)
+
 app_endpoints = [
     (r'/iamages/api/?', RootInfoHandler),
     (r'/iamages/api/latest/?', LatestFilesHandler),
@@ -502,6 +519,7 @@ app_endpoints = [
     (r'/iamages/api/user/files/?', UserFilesHandler),
     (r'/iamages/api/user/modify/?', UserModifyHandler),
     (r'/iamages/api/user/new/?', NewUserHandler),
+    (r'/iamages/api/user/check/?', CheckUserHandler),
     (r'/iamages/api/private/tos/?', TOSHandler),
     (r'/iamages/api/private/privacy/?', PrivacyPolicyHandler)
 ]
@@ -509,7 +527,7 @@ app_endpoints = [
 app_settings = {
     "static_path": os.path.join(IAMAGES_PATH, "assets"),
     "static_url_prefix": "/iamages/api/private/assets/",
-    "debug": True,
+    "debug": False,
     "gzip": True,
 }
 

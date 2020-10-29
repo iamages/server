@@ -92,6 +92,9 @@
           <li>
             <a href="#root-user-new">/iamages/api/user/new</a>
           </li>
+          <li>
+            <a href="#root-user-check">/iamages/api/user/check</a>
+          </li>
         </ul>
       </div>
       <hr>
@@ -202,7 +205,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>FileID</code> (<code>str</code>): The file's unique ID.
+            <code>FileID</code> (<code>str/None</code>): The file's unique ID.
           </li>
         </ul>
         <h4>Response codes</h4>
@@ -287,7 +290,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>FileID</code> (<code>int</code>): The file's unique ID.
+            <code>FileID</code> (<code>int/None</code>): The file's unique ID.
           </li>
           <li>
             <code>Modifications</code> (<code>list</code>): Modifications applied to the file.
@@ -344,28 +347,28 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>FileName</code> (<code>str</code>): The file's name.
+            <code>FileName</code> (<code>str/None</code>): The file's name.
           </li>
           <li>
-            <code>FileDescription</code> (<code>str</code>): The file's description.
+            <code>FileDescription</code> (<code>str/None</code>): The file's description.
           </li>
           <li>
-            <code>FileNSFW</code> (<code>bool</code>): The file's NSFW flag.
+            <code>FileNSFW</code> (<code>bool/None</code>): The file's NSFW flag.
           </li>
           <li>
-            <code>FileMime</code> (<code>str</code>): The file's MIME data.
+            <code>FileMime</code> (<code>str/None</code>): The file's MIME data.
           </li>
           <li>
-            <code>FileWidth</code> (<code>int</code>): The file's width.
+            <code>FileWidth</code> (<code>int/None</code>): The file's width.
           </li>
           <li>
-            <code>FileHeight</code> (<code>int</code>): The file's height.
+            <code>FileHeight</code> (<code>int/None</code>): The file's height.
           </li>
           <li>
-            <code>FileCreatedDate</code> (<code>str</code>): The file's date of creation.
+            <code>FileCreatedDate</code> (<code>str/None</code>): The file's date of creation.
           </li>
           <li>
-            <code>FileData</code> (<code>str</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
+            <code>FileData</code> (<code>str/None</code>): The file's data, encoded in a <code>base64</code> string with the file type header stripped.
           </li>
         </ul>
         <h4>Response codes</h4>
@@ -546,7 +549,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>UserName</code> (<code>str</code>): The user's name.
+            <code>UserName</code> (<code>str/None</code>): The user's name.
           </li>
           <li>
             <code>UserInfo</code> (<code>dict</code>): The user's information.
@@ -607,7 +610,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>UserName</code> (<code>str</code>): The files owner's <code>UserName</code>.
+            <code>UserName</code> (<code>str/None</code>): The files owner's <code>UserName</code>.
           </li>
           <li>
             <code>UserFiles</code> (<code>list</code>): A list of <code>FileID</code>s that belong to the user.
@@ -681,7 +684,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>UserName</code> (<code>int</code>): The user's name.
+            <code>UserName</code> (<code>int/None</code>): The user's name.
           </li>
           <li>
             <code>Modifications</code> (<code>list</code>): Modifications applied to the user.
@@ -735,7 +738,7 @@
         <h4>Glossary (Response)</h4>
         <ul>
           <li>
-            <code>UserName</code> (<code>str</code>): The created user's name.
+            <code>UserName</code> (<code>str/None</code>): The created user's name.
           </li>
         </ul>
         <h4>Response codes</h4>
@@ -748,6 +751,57 @@
           </li>
           <li>
             <code>403</code>: Could not create the new user (user may have already signed up).
+          </li>
+        </ul>
+      </div>
+      <hr>
+      <div id="root-user-check" class="container content">
+        <h3>POST /iamages/api/user/check</h3>
+        <p>
+          Validates a given <code>UserName</code> and <code>UserPassword</code>.
+        </p>
+        <h4>Request (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": "",
+              "UserPassword": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Request)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str</code>): The user's name.
+          </li>
+          <li>
+            <code>UserPassword</code> (<code>str</code>): The user's password.
+          </li>
+        </ul>
+        <h4>Response (JSON)</h4>
+        <pre>
+          <code>
+            {
+              "UserName": ""
+            }
+          </code>
+        </pre>
+        <h4>Glossary (Response)</h4>
+        <ul>
+          <li>
+            <code>UserName</code> (<code>str/None</code>): The user's name.
+          </li>
+        </ul>
+        <h4>Response codes</h4>
+        <ul>
+          <li>
+            <code>200</code>: Request completed successfully.
+          </li>
+          <li>
+            <code>400</code>: Missing request data.
+          </li>
+          <li>
+            <code>401</code>: User authentication failed.
           </li>
         </ul>
       </div>
