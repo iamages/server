@@ -127,7 +127,7 @@ class LatestFilesHandler(tornado.web.RequestHandler):
         response = {
             "FileIDs": []
         }
-        files = storedb_cursor.execute("SELECT FileID FROM Files ORDER BY FileID DESC LIMIT 10").fetchall()
+        files = storedb_cursor.execute("SELECT FileID FROM Files WHERE FilePrivate = 0 ORDER BY FileID DESC LIMIT 10").fetchall()
         for file in files:
             response["FileIDs"].append(file[0])
         self.write(response)
@@ -135,13 +135,18 @@ class LatestFilesHandler(tornado.web.RequestHandler):
 class RandomFileHandler(tornado.web.RequestHandler):
     def get(self):
         total_FileIDs = storedb_cursor.execute("SELECT COUNT(*) FROM Files").fetchone()[0]
-        if total_FileIDs > 0:
+        if total_FileIDs > 1:
             successful_FileID = 0
-            while successful_FileID == 0:
+            tries = 0
+            while successful_FileID == 0 or tries <= 3:
                 successful_FileID = random.randint(1, total_FileIDs)
-                if not storedb_cursor.execute("SELECT * From Files WHERE FileID = ?", (successful_FileID,)).fetchone():
+                if not storedb_cursor.execute("SELECT FileID From Files WHERE FileID = ? AND FilePrivate = 0", (successful_FileID,)).fetchone():
                     successful_FileID = 0
-            self.redirect("/iamages/api/info/" + str(successful_FileID))
+                    tries += 1
+            if successful_FileID != 0:
+                self.redirect("/iamages/api/info/" + str(successful_FileID))
+            else:
+                self.send_error(503)
         else:
             self.send_error(503)
 
