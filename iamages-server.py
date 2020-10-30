@@ -316,21 +316,41 @@ class FileInfoHandler(tornado.web.RequestHandler):
 
 class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
     def get(self, FileID):
-        if FileID != "":
-            filemeta = storedb_cursor.execute("SELECT FileName, FileMime, FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+        def perform_request():
+            filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
             if filemeta:
-                if not bool(filemeta[2]):
-                    filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
-                    if os.path.isfile(filepath):
-                        self.set_header('Content-Type', filemeta[1])
-                        with open(filepath, 'rb') as file:
-                            self.write(file.read())
-                    else:
-                        self.send_error(404)
+                filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
+                if os.path.isfile(filepath):
+                    self.set_header('Content-Type', filemeta[1])
+                    with open(filepath, 'rb') as file:
+                        self.write(file.read())
                 else:
-                    self.send_error(401)
+                    self.send_error(404)
             else:
                 self.send_error(404)
+
+        if FileID != "":
+            FilePrivate = storedb_cursor.execute("SELECT FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()[0]
+            if self.request.headers.get("Authorization"):
+                auth_header = self.request.headers.get("Authorization").split(" ")
+                if auth_header[0] == "Basic":
+                    auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
+                    if len(auth_deciphered) == 2:
+                        UserID = check_user(auth_deciphered[0], auth_deciphered[1])
+                        if UserID:
+                            if FileID == check_private_file(FileID, UserID) and FilePrivate:
+                                perform_request()
+                            elif FilePrivate == False:
+                                perform_request()
+                    else:
+                        self.send_error(400)
+                else:
+                    self.send_error(400)
+            else:
+                if FilePrivate:
+                    self.send_error(401)
+                else:
+                    perform_request()
         else:
             self.send_error(400)
 
