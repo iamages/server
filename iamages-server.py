@@ -298,6 +298,9 @@ class FileInfoHandler(tornado.web.RequestHandler):
                                     perform_request()
                                 elif FilePrivate == False:
                                     perform_request()
+                            else:
+                                self.set_status(401)
+                                self.write(self.response)
                         else:
                             self.set_status(400)
                             self.write(self.response)
@@ -305,7 +308,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
                         self.set_status(400)
                         self.write(self.response)
                 else:
-                    if FilePrivate:
+                    if FilePrivate[0]:
                         self.set_status(401)
                         self.write(self.response)
                     else:
@@ -346,12 +349,14 @@ class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
                                     perform_request()
                                 elif FilePrivate == False:
                                     perform_request()
+                            else:
+                                self.send_error(401)
                         else:
                             self.send_error(400)
                     else:
                         self.send_error(400)
                 else:
-                    if FilePrivate:
+                    if FilePrivate[0]:
                         self.send_error(401)
                     else:
                         perform_request()
