@@ -264,7 +264,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
             "FileCreatedDate": None
         }
 
-    def set_response(self, FileID, filemeta):
+    def set_response(self, filemeta):
         self.response["FileID"] = filemeta[0]
         self.response["FileDescription"] = filemeta[2]
         self.response["FileNSFW"] = bool(filemeta[3])
@@ -275,40 +275,43 @@ class FileInfoHandler(tornado.web.RequestHandler):
         self.response["FileCreatedDate"] = filemeta[8]
 
     def get(self, FileID):
-        if FileID != "":
+        def perform_request():
             filemeta = storedb_cursor.execute("SELECT * FROM Files WHERE FileID = ?", (FileID,)).fetchone()
             if filemeta:
-                if not bool(filemeta[4]):
-                    self.set_response(int(FileID), filemeta)
-                    self.write(self.response)
-                else:
-                    self.set_status(401)
-                    self.write(self.response)
+                self.set_response(filemeta)
+                self.write(self.response)
             else:
                 self.set_status(404)
                 self.write(self.response)
-        else:
-            self.set_status(400)
-            self.write(self.response)
 
-    def post(self, FileID):
         if FileID != "":
-            request = tornado.escape.json_decode(self.request.body)
-            if "UserName" in request and "UserPassword" in request:
-                UserID = check_user(request["UserName"], request["UserPassword"])
-                if UserID:
-                    if check_private_file(FileID, UserID):
-                        filemeta = storedb_cursor.execute("SELECT * FROM Files WHERE FileID = ?", (FileID,)).fetchone()
-                        self.set_response(FileID, filemeta)
-                        self.write(self.response)
+            FilePrivate = storedb_cursor.execute("SELECT FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+            if FilePrivate:
+                if self.request.headers.get("Authorization"):
+                    auth_header = self.request.headers.get("Authorization").split(" ")
+                    if auth_header[0] == "Basic":
+                        auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
+                        if len(auth_deciphered) == 2:
+                            UserID = check_user(auth_deciphered[0], auth_deciphered[1])
+                            if UserID:
+                                if FileID == check_private_file(FileID, UserID) and FilePrivate:
+                                    perform_request()
+                                elif FilePrivate == False:
+                                    perform_request()
+                        else:
+                            self.set_status(400)
+                            self.write(self.response)
                     else:
-                        self.set_status(404)
+                        self.set_status(400)
                         self.write(self.response)
                 else:
-                    self.set_status(401)
-                    self.write(self.response)
+                    if FilePrivate:
+                        self.set_status(401)
+                        self.write(self.response)
+                    else:
+                        perform_request()
             else:
-                self.set_status(400)
+                self.set_status(404)
                 self.write(self.response)
         else:
             self.set_status(400)
@@ -330,52 +333,30 @@ class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
                 self.send_error(404)
 
         if FileID != "":
-            FilePrivate = storedb_cursor.execute("SELECT FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()[0]
-            if self.request.headers.get("Authorization"):
-                auth_header = self.request.headers.get("Authorization").split(" ")
-                if auth_header[0] == "Basic":
-                    auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
-                    if len(auth_deciphered) == 2:
-                        UserID = check_user(auth_deciphered[0], auth_deciphered[1])
-                        if UserID:
-                            if FileID == check_private_file(FileID, UserID) and FilePrivate:
-                                perform_request()
-                            elif FilePrivate == False:
-                                perform_request()
+            FilePrivate = storedb_cursor.execute("SELECT FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
+            if FilePrivate:
+                if self.request.headers.get("Authorization"):
+                    auth_header = self.request.headers.get("Authorization").split(" ")
+                    if auth_header[0] == "Basic":
+                        auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
+                        if len(auth_deciphered) == 2:
+                            UserID = check_user(auth_deciphered[0], auth_deciphered[1])
+                            if UserID:
+                                if FileID == check_private_file(FileID, UserID) and FilePrivate:
+                                    perform_request()
+                                elif FilePrivate == False:
+                                    perform_request()
+                        else:
+                            self.send_error(400)
                     else:
                         self.send_error(400)
                 else:
-                    self.send_error(400)
-            else:
-                if FilePrivate:
-                    self.send_error(401)
-                else:
-                    perform_request()
-        else:
-            self.send_error(400)
-
-    def post(self, FileID):
-        if FileID != "":
-            request = tornado.escape.json_decode(self.request.body)
-            if "UserName" in request and "UserPassword" in request:
-                UserID = check_user(request["UserName"], request["UserPassword"])
-                if UserID:
-                    if check_private_file(FileID, UserID):
-                        filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
-                        if filemeta:
-                            filepath = os.path.join(FILES_PATH, str(FileID), str(filemeta[0]))
-                            if os.path.isfile(filepath):
-                                self.set_header('Content-Type', filemeta[1])
-                                with open(filepath, 'rb') as file:
-                                    self.write(file.read())
-                        else:
-                            self.send_error(404)
+                    if FilePrivate:
+                        self.send_error(401)
                     else:
-                        self.send_error(404)
-                else:
-                    self.send_error(401)
+                        perform_request()
             else:
-                self.send_error(400)
+                self.send_error(404)
         else:
             self.send_error(400)
 
