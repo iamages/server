@@ -417,16 +417,16 @@ class UserFilesHandler(tornado.web.RequestHandler):
         request = tornado.escape.json_decode(self.request.body)
         response = {
             "UserName": None,
-            "UserFiles": None 
+            "FileIDs": None 
         }
         if "UserName" in request and "UserPassword" in request:
             UserID = check_user(request["UserName"], request["UserPassword"])
             if UserID:
                 files = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE UserID = ?", (UserID,)).fetchall()
                 response["UserName"] = request["UserName"]
-                response["UserFiles"] = []
+                response["FileIDs"] = []
                 for file in files:
-                    response["UserFiles"].append(file[0])
+                    response["FileIDs"].append(file[0])
                 self.write(response)
             else:
                 self.set_status(401)
