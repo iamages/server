@@ -291,7 +291,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
                     if self.request.headers.get("Authorization"):
                         auth_header = self.request.headers.get("Authorization").split(" ")
                         if auth_header[0] == "Basic":
-                            auth_header_1_split = auth_header.split(":")
+                            auth_header_1_split = auth_header[1].split(":")
                             if len(auth_header_1_split) == 2:
                                 auth_deciphered = [base64.b64decode(auth_header_1_split[0].encode('utf-8')).decode('utf-8'), 
                                                    base64.b64decode(auth_header_1_split[1].encode('utf-8')).decode('utf-8')]
@@ -345,7 +345,7 @@ class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
                     if self.request.headers.get("Authorization"):
                         auth_header = self.request.headers.get("Authorization").split(" ")
                         if auth_header[0] == "Basic":
-                            auth_header_1_split = auth_header.split(":")
+                            auth_header_1_split = auth_header[1].split(":")
                             if len(auth_header_1_split) == 2:
                                 auth_deciphered = [base64.b64decode(auth_header_1_split[0].encode('utf-8')).decode('utf-8'), 
                                                    base64.b64decode(auth_header_1_split[1].encode('utf-8')).decode('utf-8')]
