@@ -291,12 +291,17 @@ class FileInfoHandler(tornado.web.RequestHandler):
                     if self.request.headers.get("Authorization"):
                         auth_header = self.request.headers.get("Authorization").split(" ")
                         if auth_header[0] == "Basic":
-                            auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
-                            if len(auth_deciphered) == 2:
+                            auth_header_1_split = auth_header.split(":")
+                            if len(auth_header_1_split) == 2:
+                                auth_deciphered = [base64.b64decode(auth_header_1_split[0].encode('utf-8')).decode('utf-8'), 
+                                                   base64.b64decode(auth_header_1_split[1].encode('utf-8')).decode('utf-8')]
                                 UserID = check_user(auth_deciphered[0], auth_deciphered[1])
                                 if UserID:
                                     if FileID == check_private_file(FileID, UserID):
-                                        perform_request()   
+                                        perform_request()
+                                    else:
+                                        self.set_status(401)
+                                        self.write(self.response)
                                 else:
                                     self.set_status(401)
                                     self.write(self.response)
@@ -340,8 +345,10 @@ class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
                     if self.request.headers.get("Authorization"):
                         auth_header = self.request.headers.get("Authorization").split(" ")
                         if auth_header[0] == "Basic":
-                            auth_deciphered = base64.b64decode(auth_header[1].encode('utf-8')).decode('utf-8').split(":")
-                            if len(auth_deciphered) == 2:
+                            auth_header_1_split = auth_header.split(":")
+                            if len(auth_header_1_split) == 2:
+                                auth_deciphered = [base64.b64decode(auth_header_1_split[0].encode('utf-8')).decode('utf-8'), 
+                                                   base64.b64decode(auth_header_1_split[1].encode('utf-8')).decode('utf-8')]
                                 UserID = check_user(auth_deciphered[0], auth_deciphered[1])
                                 if UserID:
                                     if FileID == check_private_file(FileID, UserID):
