@@ -429,7 +429,7 @@ class UserFilesHandler(tornado.web.RequestHandler):
         if "UserName" in request and "UserPassword" in request:
             UserID = check_user(request["UserName"], request["UserPassword"])
             if UserID:
-                files = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE UserID = ?", (UserID,)).fetchall()
+                files = storedb_cursor.execute("SELECT FileID FROM Files_Users WHERE UserID = ? ORDER BY FileID DESC", (UserID,)).fetchall()
                 response["UserName"] = request["UserName"]
                 response["FileIDs"] = []
                 for file in files:
