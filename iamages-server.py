@@ -110,19 +110,23 @@ def check_private_file(FileID, UserID):
     else:
         return None
 
-class RootInfoHandler(tornado.web.RequestHandler):
+class BaseRequestHandler(tornado.web.RequestHandler):
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+
+class RootInfoHandler(BaseRequestHandler):
     def get(self):
         self.render("api-doc.html", instance_owner_name=server_config["instance_owner"]["name"], instance_owner_contact=server_config["instance_owner"]["contact"])
 
-class TOSHandler(tornado.web.RequestHandler):
+class TOSHandler(BaseRequestHandler):
     def get(self):
         self.render("tos.html", instance_owner_name=server_config["instance_owner"]["name"], instance_owner_contact=server_config["instance_owner"]["contact"])
 
-class PrivacyPolicyHandler(tornado.web.RequestHandler):
+class PrivacyPolicyHandler(BaseRequestHandler):
     def get(self):
         self.render("privacy.html")
 
-class LatestFilesHandler(tornado.web.RequestHandler):
+class LatestFilesHandler(BaseRequestHandler):
     def get(self):
         response = {
             "FileIDs": []
@@ -132,7 +136,7 @@ class LatestFilesHandler(tornado.web.RequestHandler):
             response["FileIDs"].append(file[0])
         self.write(response)
 
-class RandomFileHandler(tornado.web.RequestHandler):
+class RandomFileHandler(BaseRequestHandler):
     def get(self):
         total_FileIDs = storedb_cursor.execute("SELECT COUNT(*) FROM Files").fetchone()[0]
         if total_FileIDs > 1:
@@ -150,7 +154,7 @@ class RandomFileHandler(tornado.web.RequestHandler):
         else:
             self.send_error(503)
 
-class FileUploadHandler(tornado.web.RequestHandler):
+class FileUploadHandler(BaseRequestHandler):
     def put(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -214,7 +218,7 @@ class FileUploadHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
-class FileModifyHandler(tornado.web.RequestHandler):
+class FileModifyHandler(BaseRequestHandler):
     def patch(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -251,7 +255,7 @@ class FileModifyHandler(tornado.web.RequestHandler):
             self.write(response)
                         
 
-class FileInfoHandler(tornado.web.RequestHandler):
+class FileInfoHandler(BaseRequestHandler):
     def prepare(self):
         self.response = {
             "FileID": None,
@@ -323,7 +327,7 @@ class FileInfoHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(self.response)
 
-class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
+class EmbedImgGeneratorHandler(BaseRequestHandler):
     def get(self, FileID):
         def perform_request():
             filemeta = storedb_cursor.execute("SELECT FileName, FileMime FROM Files WHERE FileID = ?", (FileID,)).fetchone()
@@ -370,7 +374,7 @@ class EmbedImgGeneratorHandler(tornado.web.RequestHandler):
         else:
             self.send_error(400)
 
-class EmbedFileHandler(tornado.web.RequestHandler):
+class EmbedFileHandler(BaseRequestHandler):
     def get(self, FileID):
         if FileID != "":
             filemeta = storedb_cursor.execute("SELECT FileName, FileDescription, FileMime, FileWidth, FileHeight, FilePrivate FROM Files WHERE FileID = ?", (FileID,)).fetchone()
@@ -400,7 +404,7 @@ class EmbedFileHandler(tornado.web.RequestHandler):
         else:
             self.send_error(400)
 
-class UserInfoHandler(tornado.web.RequestHandler):
+class UserInfoHandler(BaseRequestHandler):
     def get(self, UserName):
         response = {
             "UserName": None,
@@ -419,7 +423,7 @@ class UserInfoHandler(tornado.web.RequestHandler):
             self.send_error(400)
 
 
-class UserFilesHandler(tornado.web.RequestHandler):
+class UserFilesHandler(BaseRequestHandler):
     def post(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -442,7 +446,7 @@ class UserFilesHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
-class UserModifyHandler(tornado.web.RequestHandler):
+class UserModifyHandler(BaseRequestHandler):
     def patch(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -478,7 +482,7 @@ class UserModifyHandler(tornado.web.RequestHandler):
             self.write(response)
 
 
-class NewUserHandler(tornado.web.RequestHandler):
+class NewUserHandler(BaseRequestHandler):
     def put(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
@@ -497,7 +501,7 @@ class NewUserHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write(response)
 
-class CheckUserHandler(tornado.web.RequestHandler):
+class CheckUserHandler(BaseRequestHandler):
     def post(self):
         request = tornado.escape.json_decode(self.request.body)
         response = {
