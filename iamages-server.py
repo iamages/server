@@ -113,7 +113,7 @@ def check_private_file(FileID, UserID):
 class BaseRequestHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Headers", "Accept")
+        self.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
     def options(self):
         self.set_status(204)
         self.finish()
