@@ -3,8 +3,10 @@
     "name": "jkelol111",
     "contact": "mailto:jkelol111@gmail.com"
   },
-  "port": 80,
-  "port_secure": 443,
+  "ports": {
+    "http": 80,
+    "https": 443
+  },
   "max_file_size": 10485760,
   "storage_directory": "./storage",
   "keys": {

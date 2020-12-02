@@ -32,7 +32,7 @@ logging.info("[Iamages API Server version '{0}']".format(__version__))
 logging.info(__copyright__)
 logging.info("IAMAGES_PATH = " + str(IAMAGES_PATH))
 
-logging.info("Starting imgcloud server...")
+logging.info("Starting Iamages server...")
 logging.info("Loading server configuration file...")
 try:
     server_config = json.load(open(os.path.join(os.getcwd(), arguments.config_path), "r"))
@@ -555,13 +555,13 @@ if "keys" in server_config:
         ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ssl_ctx.load_cert_chain(os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"]),
                                 os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"]))
-        application.listen(server_config['port'])
-        application.listen(server_config["port_secure"], ssl_options=ssl_ctx)
-        logging.info("Listening for requests on port {0} and {1}!".format(server_config["port_secure"], server_config["port"]))
+        application.listen(server_config['ports']["http"])
+        application.listen(server_config["ports"]["https"], ssl_options=ssl_ctx)
+        logging.info("Listening for requests on port {0} and {1}!".format(server_config["ports"]["https"], server_config["ports"]["http"]))
     else:
-        application.listen(server_config['port'])
-        logging.info("Listening for requests on port {0}!".format(server_config["port"]))
+        application.listen(server_config['ports']["http"])
+        logging.info("Listening for requests on port {0}!".format(server_config["ports"]["http"]))
 else:
-    application.listen(server_config['port'])
-    logging.info("Listening for requests on port {0}!".format(server_config["port"]))
+    application.listen(server_config['ports']["http"])
+    logging.info("Listening for requests on port {0}!".format(server_config["ports"]["http"]))
 tornado.ioloop.IOLoop.current().start()
