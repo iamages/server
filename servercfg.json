@@ -11,6 +11,8 @@
     "https": 443
   },
   "keys": {
+    "use": false,
+    "https_redirect": false,
     "directory": "",
     "files": {
       "chain": "",
