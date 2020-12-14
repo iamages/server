@@ -593,26 +593,22 @@ app = starlette.applications.Starlette(routes=[
 ], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
 
 if __name__ == "__main__":
-    import asyncio
-    import hypercorn.config
-    import hypercorn.asyncio
-    config = hypercorn.config.Config()
+    # import asyncio
+    # import hypercorn.config
+    # import hypercorn.asyncio
+    # config = hypercorn.config.Config()
 
-    config.access_log_format = "%(h)s | %(S)s | %(r)s | %(s)s %(st)s"
-    config.accesslog = "-"
+    # config.access_log_format = "%(h)s | %(S)s | %(r)s | %(s)s %(st)s"
+    # config.accesslog = "-"
 
-    config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
-    asyncio.run(hypercorn.asyncio.serve(app, config))
-    # uvicorn_cfg = {
-    #     "app": "iamages_server:app",
-    #     "host": "0.0.0.0",
-    #     "port": server_config["ports"]['http'],
-    #     "workers": 4,
-    #     "proxy_headers": True
-    # }
-    # if server_config["keys"]["directory"] != "":
-    #     uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
-    #     uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
+    # config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
+    # asyncio.run(hypercorn.asyncio.serve(app, config))
+    uvicorn_cfg = {
+        "app": "iamages_server:app",
+        "host": "0.0.0.0",
+        "port": server_config["ports"]['http'],
+        "workers": 4
+    }
 
-    # import uvicorn
-    # uvicorn.run(**uvicorn_cfg)
+    import uvicorn
+    uvicorn.run(**uvicorn_cfg)
