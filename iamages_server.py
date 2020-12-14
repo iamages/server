@@ -23,7 +23,6 @@ import starlette.middleware.cors
 import starlette.middleware.gzip
 import starlette.middleware.httpsredirect
 import starlette.responses
-import hypercorn.middleware
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -565,14 +564,6 @@ class User:
             else:
                 return starlette.responses.Response(status_code=400)
 
-middlewares = [
-    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
-    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
-]
-
-if server_config["keys"]["directory"] != "":  
-    middlewares.append(starlette.middleware.Middleware(starlette.middleware.httpsredirect.HTTPSRedirectMiddleware))  
-
 app = starlette.applications.Starlette(routes=[
     starlette.routing.Mount("/iamages/api", routes=[
         starlette.routing.Mount("/private", routes=[
@@ -596,9 +587,10 @@ app = starlette.applications.Starlette(routes=[
             starlette.routing.Route("/check", User.Check)
         ])
     ])
-], middleware=middlewares, on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
-
-redirected_app = hypercorn.middleware.HTTPToHTTPSRedirectMiddleware(app, host=server_config["meta"]["host"])
+], middleware=[
+    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
+    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
+], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
 
 if __name__ == "__main__":
     import asyncio
@@ -609,15 +601,8 @@ if __name__ == "__main__":
     config.access_log_format = "%(h)s | %(S)s | %(r)s | %(s)s %(st)s"
     config.accesslog = "-"
 
-    if server_config["keys"]["directory"] != "":
-        config.insecure_bind = "0.0.0.0:" + str(server_config["ports"]['http'])
-        config.bind = "0.0.0.0:" + str(server_config["ports"]['https'])
-        config.certfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
-        config.keyfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
-        asyncio.run(hypercorn.asyncio.serve(redirected_app, config))
-    else:
-        config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
-        asyncio.run(hypercorn.asyncio.serve(app, config))
+    config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
+    asyncio.run(hypercorn.asyncio.serve(app, config))
     # uvicorn_cfg = {
     #     "app": "iamages_server:app",
     #     "host": "0.0.0.0",
