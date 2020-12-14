@@ -602,7 +602,8 @@ if __name__ == "__main__":
         "app": "iamages_server:app",
         "host": "0.0.0.0",
         "port": server_config["ports"]['http'],
-        "workers": 4
+        "workers": 4,
+        "proxy_headers": True
     }
 
     if server_config["keys"]["use"]:
