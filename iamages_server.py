@@ -21,6 +21,7 @@ import starlette.templating
 import starlette.middleware
 import starlette.middleware.cors
 import starlette.middleware.gzip
+import starlette.middleware.httpsredirect
 import starlette.responses
 import hypercorn.middleware
 
@@ -563,7 +564,14 @@ class User:
                     return starlette.responses.Response(status_code=401)
             else:
                 return starlette.responses.Response(status_code=400)
-            
+
+middlewares = [
+    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
+    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
+]
+
+if server_config["keys"]["directory"] != "":  
+    middlewares.append(starlette.middleware.Middleware(starlette.middleware.httpsredirect.HTTPSRedirectMiddleware))  
 
 app = starlette.applications.Starlette(routes=[
     starlette.routing.Mount("/iamages/api", routes=[
@@ -588,10 +596,7 @@ app = starlette.applications.Starlette(routes=[
             starlette.routing.Route("/check", User.Check)
         ])
     ])
-], middleware=[
-    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
-    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
-], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
+], middleware=middlewares, on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
 
 redirected_app = hypercorn.middleware.HTTPToHTTPSRedirectMiddleware(app, host=server_config["meta"]["host"])
 
