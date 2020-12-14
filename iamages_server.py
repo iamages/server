@@ -596,20 +596,17 @@ if __name__ == "__main__":
     import asyncio
     import hypercorn.config
     import hypercorn.asyncio
-    import hypercorn.middleware
     config = hypercorn.config.Config()
 
     config.accesslog = "-"
 
     if server_config["keys"]["directory"] != "":
-        config.insecure_bind = "0.0.0.0:" + str(server_config["ports"]['http'])
         config.bind = "0.0.0.0:" + str(server_config["ports"]['https'])
         config.certfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
         config.keyfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
-        asyncio.run(hypercorn.asyncio.serve(hypercorn.middleware.HTTPToHTTPSRedirectMiddleware(app, server_config["meta"]["host"]), config))
     else:
         config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
-        asyncio.run(hypercorn.asyncio.serve(app, config))
+    asyncio.run(hypercorn.asyncio.serve(app, config))
     # uvicorn_cfg = {
     #     "app": "iamages_server:app",
     #     "host": "0.0.0.0",
