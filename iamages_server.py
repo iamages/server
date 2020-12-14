@@ -564,28 +564,54 @@ class User:
                 return starlette.responses.Response(status_code=400)
             
 
+# app = starlette.applications.Starlette(routes=[
+#     starlette.routing.Mount("/iamages/api", routes=[
+#         starlette.routing.Mount("/private", routes=[
+#             starlette.routing.Mount("/static", starlette.staticfiles.StaticFiles(directory=os.path.join(IAMAGES_PATH, "static")), name="static"),
+#             starlette.routing.Route("/tos", Private.TOS),
+#             starlette.routing.Route("/privacy", Private.PrivacyPolicy)
+#         ]),
+#         starlette.routing.Route("/", Docs),
+#         starlette.routing.Route("/latest", Latest),
+#         starlette.routing.Route("/random", Random),
+#         starlette.routing.Route("/upload", Upload),
+#         starlette.routing.Route("/modify", Modify),
+#         starlette.routing.Route("/info/{FileID}", Info),
+#         starlette.routing.Route("/embed/{FileID}", Embed),
+#         starlette.routing.Route("/img/{FileID}", Img),
+#         starlette.routing.Mount("/user", routes=[
+#             starlette.routing.Route("/info/{UserName}", User.Info),
+#             starlette.routing.Route("/files", User.Files),
+#             starlette.routing.Route("/modify", User.Modify),
+#             starlette.routing.Route("/new", User.New),
+#             starlette.routing.Route("/check", User.Check)
+#         ])
+#     ])
+# ], middleware=[
+#     starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
+#     starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
+# ], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
+
 app = starlette.applications.Starlette(routes=[
-    starlette.routing.Mount("/iamages/api", routes=[
-        starlette.routing.Mount("/private", routes=[
-            starlette.routing.Mount("/static", starlette.staticfiles.StaticFiles(directory=os.path.join(IAMAGES_PATH, "static")), name="static"),
-            starlette.routing.Route("/tos", Private.TOS),
-            starlette.routing.Route("/privacy", Private.PrivacyPolicy)
-        ]),
-        starlette.routing.Route("/", Docs),
-        starlette.routing.Route("/latest", Latest),
-        starlette.routing.Route("/random", Random),
-        starlette.routing.Route("/upload", Upload),
-        starlette.routing.Route("/modify", Modify),
-        starlette.routing.Route("/info/{FileID}", Info),
-        starlette.routing.Route("/embed/{FileID}", Embed),
-        starlette.routing.Route("/img/{FileID}", Img),
-        starlette.routing.Mount("/user", routes=[
-            starlette.routing.Route("/info/{UserName}", User.Info),
-            starlette.routing.Route("/files", User.Files),
-            starlette.routing.Route("/modify", User.Modify),
-            starlette.routing.Route("/new", User.New),
-            starlette.routing.Route("/check", User.Check)
-        ])
+    starlette.routing.Mount("/private", routes=[
+        starlette.routing.Mount("/static", starlette.staticfiles.StaticFiles(directory=os.path.join(IAMAGES_PATH, "static")), name="static"),
+        starlette.routing.Route("/tos", Private.TOS),
+        starlette.routing.Route("/privacy", Private.PrivacyPolicy)
+    ]),
+    starlette.routing.Route("/", Docs),
+    starlette.routing.Route("/latest", Latest),
+    starlette.routing.Route("/random", Random),
+    starlette.routing.Route("/upload", Upload),
+    starlette.routing.Route("/modify", Modify),
+    starlette.routing.Route("/info/{FileID}", Info),
+    starlette.routing.Route("/embed/{FileID}", Embed),
+    starlette.routing.Route("/img/{FileID}", Img),
+    starlette.routing.Mount("/user", routes=[
+        starlette.routing.Route("/info/{UserName}", User.Info),
+        starlette.routing.Route("/files", User.Files),
+        starlette.routing.Route("/modify", User.Modify),
+        starlette.routing.Route("/new", User.New),
+        starlette.routing.Route("/check", User.Check)
     ])
 ], middleware=[
     starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
