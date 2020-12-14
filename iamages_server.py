@@ -593,16 +593,33 @@ app = starlette.applications.Starlette(routes=[
 ], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
 
 if __name__ == "__main__":
-    uvicorn_cfg = {
-        "app": "iamages_server:app",
-        "host": "0.0.0.0",
-        "port": server_config["ports"]['http'],
-        "workers": 4,
-        "proxy_headers": True
-    }
-    if server_config["keys"]["directory"] != "":
-        uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
-        uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
+    import asyncio
+    import hypercorn.config
+    import hypercorn.asyncio
+    import hypercorn.middleware
+    config = hypercorn.config.Config()
 
-    import uvicorn
-    uvicorn.run(**uvicorn_cfg)
+    config.accesslog = "-"
+
+    if server_config["keys"]["directory"] != "":
+        config.insecure_bind = "0.0.0.0:" + str(server_config["ports"]['http'])
+        config.bind = "0.0.0.0:" + str(server_config["ports"]['https'])
+        config.certfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
+        config.keyfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
+        asyncio.run(hypercorn.asyncio.serve(hypercorn.middleware.HTTPToHTTPSRedirectMiddleware(app, server_config["meta"]["host"]), config))
+    else:
+        config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
+        asyncio.run(hypercorn.asyncio.serve(app, config))
+    # uvicorn_cfg = {
+    #     "app": "iamages_server:app",
+    #     "host": "0.0.0.0",
+    #     "port": server_config["ports"]['http'],
+    #     "workers": 4,
+    #     "proxy_headers": True
+    # }
+    # if server_config["keys"]["directory"] != "":
+    #     uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
+    #     uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
+
+    # import uvicorn
+    # uvicorn.run(**uvicorn_cfg)

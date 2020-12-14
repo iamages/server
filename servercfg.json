@@ -3,7 +3,8 @@
     "owner": {
       "name": "jkelol111",
       "contact": "mailto:jkelol111@gmail.com"
-    }
+    },
+    "host": "localhost"
   },
   "ports": {
     "http": 80,

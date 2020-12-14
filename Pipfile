@@ -14,6 +14,7 @@ bcrypt = "*"
 aiofiles = "*"
 sqlalchemy = "*"
 uvicorn = "*"
+hypercorn = "*"
 
 [dev-packages]
 
