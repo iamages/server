@@ -22,6 +22,7 @@ import starlette.middleware
 import starlette.middleware.cors
 import starlette.middleware.gzip
 import starlette.responses
+import hypercorn.middleware
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -592,21 +593,26 @@ app = starlette.applications.Starlette(routes=[
     starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
 ], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
 
+redirected_app = hypercorn.middleware.HTTPToHTTPSRedirectMiddleware(app, host=server_config["meta"]["host"])
+
 if __name__ == "__main__":
     import asyncio
     import hypercorn.config
     import hypercorn.asyncio
     config = hypercorn.config.Config()
 
+    config.access_log_format = "%(h)s | %(S)s | %(r)s | %(s)s %(st)s"
     config.accesslog = "-"
 
     if server_config["keys"]["directory"] != "":
+        config.insecure_bind = "0.0.0.0:" + str(server_config["ports"]['http'])
         config.bind = "0.0.0.0:" + str(server_config["ports"]['https'])
         config.certfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
         config.keyfile = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
+        asyncio.run(hypercorn.asyncio.serve(redirected_app, config))
     else:
         config.bind = "0.0.0.0:" + str(server_config["ports"]['http'])
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+        asyncio.run(hypercorn.asyncio.serve(app, config))
     # uvicorn_cfg = {
     #     "app": "iamages_server:app",
     #     "host": "0.0.0.0",
