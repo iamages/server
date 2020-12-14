@@ -595,9 +595,10 @@ app = starlette.applications.Starlette(routes=[
 if __name__ == "__main__":
     uvicorn_cfg = {
         "app": "iamages_server:app",
-        "host": "::",
+        "host": "0.0.0.0",
         "port": server_config["ports"]['http'],
-        "workers": 4
+        "workers": 4,
+        "proxy_headers": True
     }
     if server_config["keys"]["directory"] != "":
         uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])

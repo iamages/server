@@ -8,7 +8,7 @@ starlette = "*"
 jinja2 = "*"
 databases = {extras = ["sqlite"], version = "*"}
 pillow = "*"
-uvicorn = "*"
+uvicorn = {extras = ["standard"], version = "*"}
 gunicorn = "*"
 python-magic = "*"
 bcrypt = "*"
