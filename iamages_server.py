@@ -22,8 +22,6 @@ import starlette.middleware
 import starlette.middleware.cors
 import starlette.middleware.gzip
 import starlette.responses
-import uvicorn
-import uvicorn.config
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -597,12 +595,13 @@ app = starlette.applications.Starlette(routes=[
 if __name__ == "__main__":
     uvicorn_cfg = {
         "app": "iamages_server:app",
-        "host": "0.0.0.0",
+        "host": "::",
         "port": server_config["ports"]['http'],
-        "workers": 3
+        "workers": 4
     }
     if server_config["keys"]["directory"] != "":
         uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
         uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
 
+    import uvicorn
     uvicorn.run(**uvicorn_cfg)
