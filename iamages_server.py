@@ -601,13 +601,13 @@ if __name__ == "__main__":
     uvicorn_cfg = {
         "app": "iamages_server:app",
         "host": "0.0.0.0",
-        "port": server_config["ports"]['http'],
+        "port": server_config["ports"]["http"],
         "workers": 4,
         "proxy_headers": True
     }
 
     if server_config["keys"]["use"]:
-        uvicorn_cfg["port"] = server_config["ports"]['https']
+        uvicorn_cfg["port"] = server_config["ports"]["https"]
         uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
         uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
 
