@@ -7,6 +7,8 @@ CREATE TABLE Files (
     FileMime TEXT,
     FileWidth INTEGER,
     FileHeight INTEGER,
+    FileHash TEXT,
+    FileLink INTEGER,
     FileCreatedDate TEXT
 );
 CREATE TABLE Files_Users (

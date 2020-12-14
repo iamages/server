@@ -5,13 +5,13 @@
     <title>Iamages API Reference</title>
     <meta type="description" content="Reference for Iamages API.">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="{{static_url("css/bulma.min.css")}}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
   </head>
   <body>
     <section class="section">
       <div class="container">
         <figure class="image is-48x48">
-          <img src="{{static_url("icons/icon-96.png")}}">
+          <img src="{{ url_for('static', path='/icons/icon-96.png') }}">
         </figure>
         <br>
       </div>
@@ -30,15 +30,11 @@
           <li>
             We only support images with mime types:
             <ul>
+              {% for supported_filemime in supported_filemimes %}
               <li>
-                <code>image/jpeg</code>
+                <code>{{ supported_filemime }}</code>
               </li>
-              <li>
-                <code>image/png</code>
-              </li>
-              <li>
-                <code>image/gif</code>
-              </li>
+              {% endfor %}
             </ul>
             Any other images uploaded will be rejected.
           </li>
@@ -48,7 +44,7 @@
           <li>
             If methods return response code <code>500</code>, please contact this instance's owner: 
             <br>
-            <a href="{{instance_owner_contact}}" class="button is-link">contact {{instance_owner_name}}</a>
+            <a href="{{ owner['contact'] }}" class="button is-link">contact {{ owner['name'] }}</a>
           </li>
         </ul>
       </div>
