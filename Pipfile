@@ -8,12 +8,12 @@ starlette = "*"
 jinja2 = "*"
 databases = {extras = ["sqlite"], version = "*"}
 pillow = "*"
-uvicorn = {extras = ["standard"], version = "*"}
 gunicorn = "*"
 python-magic = "*"
 bcrypt = "*"
 aiofiles = "*"
 sqlalchemy = "*"
+uvicorn = "*"
 
 [dev-packages]
 
