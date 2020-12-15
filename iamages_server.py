@@ -552,14 +552,6 @@ class User:
             else:
                 return starlette.responses.Response(status_code=400)
 
-middlewares = [
-    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
-    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
-]
-
-if server_config["keys"]["https_redirect"]:
-    middlewares.append(starlette.middleware.Middleware(starlette.middleware.httpsredirect.HTTPSRedirectMiddleware))
-
 app = starlette.applications.Starlette(routes=[
     starlette.routing.Mount("/iamages/api", routes=[
         starlette.routing.Mount("/private", routes=[
@@ -583,21 +575,7 @@ app = starlette.applications.Starlette(routes=[
             starlette.routing.Route("/check", User.Check)
         ])
     ])
-], middleware=middlewares, on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])
-
-if __name__ == "__main__":
-    uvicorn_cfg = {
-        "app": "iamages_server:app",
-        "host": "0.0.0.0",
-        "port": server_config["ports"]["http"],
-        "workers": 4,
-        "proxy_headers": True
-    }
-
-    if server_config["keys"]["use"]:
-        uvicorn_cfg["port"] = server_config["ports"]["https"]
-        uvicorn_cfg["ssl_certfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["chain"])
-        uvicorn_cfg["ssl_keyfile"] = os.path.join(server_config["keys"]["directory"], server_config["keys"]["files"]["private"])
-
-    import uvicorn
-    uvicorn.run(**uvicorn_cfg)
+], middleware=[
+    starlette.middleware.Middleware(starlette.middleware.cors.CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
+    starlette.middleware.Middleware(starlette.middleware.gzip.GZipMiddleware)
+], on_startup=[iamagesdb.connect], on_shutdown=[iamagesdb.disconnect])

@@ -6,13 +6,12 @@ name = "pypi"
 [packages]
 starlette = "*"
 jinja2 = "*"
+aiofiles = "*"
 databases = {extras = ["sqlite"], version = "*"}
-pillow = "*"
-gunicorn = "*"
 python-magic = "*"
 bcrypt = "*"
-aiofiles = "*"
-sqlalchemy = "*"
+pillow = "*"
+gunicorn = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 
 [dev-packages]
