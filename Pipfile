@@ -13,8 +13,7 @@ python-magic = "*"
 bcrypt = "*"
 aiofiles = "*"
 sqlalchemy = "*"
-uvicorn = "*"
-hypercorn = "*"
+uvicorn = {extras = ["standard"], version = "*"}
 
 [dev-packages]
 

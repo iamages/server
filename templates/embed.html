@@ -7,8 +7,8 @@
     <meta property="og:site_name" content="Iamages">
     <meta property="og:title" content="{{title}}">
     <meta property="og:description" content="{{FileDescription}}">
-    <meta property="og:url" content="/iamages/api/embed/{{FileID}}">
-    <meta property="og:image" content="/iamages/api/img/{{FileID}}">
+    <meta property="og:url" content="{{ url_for(**{'name': 'embed', 'FileID': FileID}) }}">
+    <meta property="og:image" content="{{ url_for(**{'name': 'img', 'FileID': FileID}) }}">
     <meta property="og:image:type" content="{{FileMime}}">
     <meta property="og:image:width" content="{{FileWidth}}">
     <meta property="og:image:height" content={{FileHeight}}>
@@ -16,21 +16,21 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{title}}">
     <meta name="twitter:description" content="{{FileDescription}}">
-    <meta name="twitter:image" content="/iamages/api/img/{{FileID}}">
+    <meta name="twitter:image" content="{{ url_for(**{'name': 'img', 'FileID': FileID}) }}">
     <meta name="twitter:image:alt" content="{{FileDescription}}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/iamages/api/private/static/css/bulma.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
   </head>
   <body>
     <section class="section">
       <div class="container">
         <figure class="image is-48x48">
-          <img src="/iamages/api/private/static/icons/icon-96.png">
+          <img src="{{ url_for('static', path='/icons/icon-96.png') }}">
         </figure>
         <br>
         <h2 class="title">{{FileDescription}}</h2>
         <hr>
-        <img src="/iamages/api/img/{{FileID}}" alt="We couldn't find the file you wanted :(">
+        <img src="{{ url_for(**{'name': 'img', 'FileID': FileID}) }}" alt="We couldn't find the file you wanted :(">
         <hr>
         <p>
           Served from Iamages, the open source image sharing platform.

@@ -340,113 +340,104 @@ class Info(starlette.endpoints.HTTPEndpoint):
                 response_body["FileHeight"] = FileInformation[5]
             response_body["FileCreatedDate"] = FileInformation[6]
 
-        if request.path_params["FileID"] != "":
-            FileID = int(request.path_params["FileID"])
-            FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink FROM Files WHERE FileID = :FileID", {
-                "FileID": FileID
-            })
-            FilePrivate =  bool(FileInformation[2])
-            if FilePrivate:
-                UserID = await SharedFunctions.process_auth_header(request.headers)
-                if UserID:
-                    if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                        await set_response(FileInformation)
-                    else:
-                        return starlette.responses.Response(status_code=401)
+        FileID = int(request.path_params["FileID"])
+        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink FROM Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
+        FilePrivate =  bool(FileInformation[2])
+        if FilePrivate:
+            UserID = await SharedFunctions.process_auth_header(request.headers)
+            if UserID:
+                if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
+                    await set_response(FileInformation)
                 else:
-                    return starlette.responses.Response(status_code=403)
+                    return starlette.responses.Response(status_code=401)
             else:
-                await set_response(FileInformation)
-            return starlette.responses.JSONResponse(response_body)
+                return starlette.responses.Response(status_code=403)
         else:
-            return starlette.responses.Response(status_code=400)
+            await set_response(FileInformation)
+        return starlette.responses.JSONResponse(response_body)
 
 class Embed(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
-        if request.path_params["FileID"] != "":
-            response_template = {
-                "request": request,
-                "title": "Untitled - from Iamages",
-                "FileDescription": "Untitled",
-                "FileID": 0,
-                "FileMime": "",
-                "FileWidth": 0,
-                "FileHeight": 0
-            }
-            FileID = int(request.path_params["FileID"])
-            FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FilePrivate, FileMime, FileWidth, FileHeight, FileLink From Files WHERE FileID = :FileID", {
-                "FileID": FileID
-            })
-            if FileInformation:
-                if bool(FileInformation[1]):
-                    response_template["title"] = "Private file from Iamages"
-                    response_template["FileDescription"] = "The owner of this file has enabled private mode. No peeking allowed! 👀"
-                else:
-                    response_template["title"] = FileInformation[0] + " - from Iamages"
-                    response_template["FileDescription"] = FileInformation[0]
-                    response_template["FileID"] = FileID
-                    if FileInformation[5]:
-                        linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
-                            "FileID": FileInformation[5]
-                        })
-                        response_template["FileMime"] = linked_FileInformation[0]
-                        response_template["FileWidth"] = linked_FileInformation[1]
-                        response_template["FileHeight"] = linked_FileInformation[2]
-                    else:
-                        response_template["FileMime"] = FileInformation[2]
-                        response_template["FileWidth"] = FileInformation[3]
-                        response_template["FileHeight"] = FileInformation[4]
-                return templates.TemplateResponse("embed.html", response_template)
+        response_template = {
+            "request": request,
+            "title": "Untitled - from Iamages",
+            "FileDescription": "Untitled",
+            "FileID": 0,
+            "FileMime": "",
+            "FileWidth": 0,
+            "FileHeight": 0
+        }
+        FileID = int(request.path_params["FileID"])
+        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FilePrivate, FileMime, FileWidth, FileHeight, FileLink From Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
+        if FileInformation:
+            if bool(FileInformation[1]):
+                response_template["title"] = "Private file from Iamages"
+                response_template["FileDescription"] = "The owner of this file has enabled private mode. No peeking allowed! 👀"
             else:
-                response_template["title"] = "File not found on Iamages"
-                response_template["FileDescription"] = "The requested file couldn't be found. Ran memcheck yet? 🐿"
-                return templates.TemplateResponse("embed.html", response_template, status_code=404)
+                response_template["title"] = FileInformation[0] + " - from Iamages"
+                response_template["FileDescription"] = FileInformation[0]
+                response_template["FileID"] = FileID
+                if FileInformation[5]:
+                    linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
+                        "FileID": FileInformation[5]
+                    })
+                    response_template["FileMime"] = linked_FileInformation[0]
+                    response_template["FileWidth"] = linked_FileInformation[1]
+                    response_template["FileHeight"] = linked_FileInformation[2]
+                else:
+                    response_template["FileMime"] = FileInformation[2]
+                    response_template["FileWidth"] = FileInformation[3]
+                    response_template["FileHeight"] = FileInformation[4]
+            return templates.TemplateResponse("embed.html", response_template)
         else:
-            return starlette.responses.Response(status_code=400)
+            response_template["title"] = "File not found on Iamages"
+            response_template["FileDescription"] = "The requested file couldn't be found. Ran memcheck yet? 🐿"
+            return templates.TemplateResponse("embed.html", response_template, status_code=404)
 
 class Img(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
-        if request.path_params["FileID"] != "":
-            FileID = int(request.path_params["FileID"])
-            FileInformation = await iamagesdb.fetch_one("SELECT FileName, FilePrivate, FileMime, FileLink FROM Files WHERE FileID = :FileID", {
-                "FileID": FileID
-            })
+        FileID = int(request.path_params["FileID"])
+        FileInformation = await iamagesdb.fetch_one("SELECT FileName, FilePrivate, FileMime, FileLink FROM Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
 
-            async def send_img():
-                FileMime = FileInformation[2]
-                if FileInformation[3]:
-                    linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
-                        "FileID": FileInformation[3]
+        async def send_img():
+            FileMime = FileInformation[2]
+            if FileInformation[3]:
+                linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
+                    "FileID": FileInformation[3]
+                })
+                file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
+                FileMime = linked_FileInformation[1]
+            else:
+                file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
+            
+            if os.path.isfile(file_path):
+                with open(file_path, "rb") as file:
+                    return starlette.responses.Response(file.read(), headers={
+                        "Content-Type": FileMime
                     })
-                    file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
-                    FileMime = linked_FileInformation[1]
-                else:
-                    file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
-                
-                if os.path.isfile(file_path):
-                    with open(file_path, "rb") as file:
-                        return starlette.responses.Response(file.read(), headers={
-                            "Content-Type": FileMime
-                        })
-                else:
-                    return starlette.responses.Response(status_code=404)
+            else:
+                return starlette.responses.Response(status_code=404)
 
-            if FileInformation:
-                if FileInformation[1]:
-                    UserID = await SharedFunctions.process_auth_header(request.headers)
-                    if UserID:
-                        if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                            return await send_img()
-                        else:
-                            return starlette.responses.Response(status_code=401)
+        if FileInformation:
+            if FileInformation[1]:
+                UserID = await SharedFunctions.process_auth_header(request.headers)
+                if UserID:
+                    if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
+                        return await send_img()
                     else:
                         return starlette.responses.Response(status_code=401)
                 else:
-                    return await send_img()
+                    return starlette.responses.Response(status_code=401)
             else:
-                return starlette.responses.Response(status_code=404)
+                return await send_img()
         else:
-            return starlette.responses.Response(status_code=400)
+            return starlette.responses.Response(status_code=404)
 
 class User:
     class Info(starlette.endpoints.HTTPEndpoint):
@@ -455,19 +446,16 @@ class User:
                 "UserName": None,
                 "UserInfo": {}
             }
-            if request.path_params["UserName"] != "":
-                UserInfo = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserName = :UserName", {
-                    "UserName": request.path_params["UserName"]
-                })
-                if UserInfo:
-                    response_body["UserName"] = request.path_params["UserName"]
-                    response_body["UserInfo"]["UserBiography"] = UserInfo[0]
-                    response_body["UserInfo"]["UserCreatedDate"] = UserInfo[1]
-                    return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=404)
+            UserInfo = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserName = :UserName", {
+                "UserName": request.path_params["UserName"]
+            })
+            if UserInfo:
+                response_body["UserName"] = request.path_params["UserName"]
+                response_body["UserInfo"]["UserBiography"] = UserInfo[0]
+                response_body["UserInfo"]["UserCreatedDate"] = UserInfo[1]
+                return starlette.responses.JSONResponse(response_body)
             else:
-                return starlette.responses.Response(status_code=400) 
+                return starlette.responses.Response(status_code=404)
 
     class Files(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
@@ -584,11 +572,11 @@ app = starlette.applications.Starlette(routes=[
         starlette.routing.Route("/random", Random),
         starlette.routing.Route("/upload", Upload),
         starlette.routing.Route("/modify", Modify),
-        starlette.routing.Route("/info/{FileID}", Info),
-        starlette.routing.Route("/embed/{FileID}", Embed),
-        starlette.routing.Route("/img/{FileID}", Img),
+        starlette.routing.Route("/info/{FileID:int}", Info),
+        starlette.routing.Route("/embed/{FileID:int}", Embed, name="embed"),
+        starlette.routing.Route("/img/{FileID:int}", Img, name="img"),
         starlette.routing.Mount("/user", routes=[
-            starlette.routing.Route("/info/{UserName}", User.Info),
+            starlette.routing.Route("/info/{UserName:str}", User.Info),
             starlette.routing.Route("/files", User.Files),
             starlette.routing.Route("/modify", User.Modify),
             starlette.routing.Route("/new", User.New),
