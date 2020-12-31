@@ -173,7 +173,7 @@ class Random(starlette.endpoints.HTTPEndpoint):
                     successful_FileID = 0
                     attempts += 1
             if successful_FileID != 0:
-                return starlette.responses.RedirectResponse(request.url_for("info") + successful_FileID)
+                return starlette.responses.RedirectResponse(request.url_for("info", FileID=successful_FileID))
             else:
                 return starlette.responses.Response(status_code=503)
         else:
@@ -564,7 +564,7 @@ app = starlette.applications.Starlette(routes=[
         starlette.routing.Route("/random", Random),
         starlette.routing.Route("/upload", Upload),
         starlette.routing.Route("/modify", Modify),
-        starlette.routing.Route("/info/{FileID:int}", Info),
+        starlette.routing.Route("/info/{FileID:int}", Info, name="info"),
         starlette.routing.Route("/embed/{FileID:int}", Embed, name="embed"),
         starlette.routing.Route("/img/{FileID:int}", Img, name="img"),
         starlette.routing.Mount("/user", routes=[
