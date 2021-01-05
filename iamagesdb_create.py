@@ -22,6 +22,8 @@ print("2/3: Create the new database.")
 storedb_connection = sqlite3.connect(FILESDB_PATH, )
 storedb_cursor = storedb_connection.cursor()
 
+storedb_cursor.execute("PRAGMA journal_mode=WAL")
+
 print("3/3: Execute database creation.")
 with open("iamagesdb.sql", "r") as sqlscript:
     storedb_cursor.executescript(sqlscript.read())
