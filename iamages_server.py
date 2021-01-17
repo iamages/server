@@ -21,7 +21,6 @@ import starlette.templating
 import starlette.middleware
 import starlette.middleware.cors
 import starlette.middleware.gzip
-import starlette.middleware.httpsredirect
 import starlette.responses
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -441,21 +440,27 @@ class Img(starlette.endpoints.HTTPEndpoint):
 
 class User:
     class Info(starlette.endpoints.HTTPEndpoint):
-        async def get(self, request):
+        async def post(self, request):
+            request_body = await request.json()
             response_body = {
                 "UserName": None,
                 "UserInfo": {}
             }
-            UserInfo = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserName = :UserName", {
-                "UserName": request.path_params["UserName"]
-            })
-            if UserInfo:
-                response_body["UserName"] = request.path_params["UserName"]
-                response_body["UserInfo"]["UserBiography"] = UserInfo[0]
-                response_body["UserInfo"]["UserCreatedDate"] = UserInfo[1]
-                return starlette.responses.JSONResponse(response_body)
+            if "UserName" in request_body and "UserPassword" in request_body:
+                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+                if UserID:
+                    UserInfo = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserID = :UserID", {
+                        "UserID": UserID
+                    })
+                    if UserInfo:
+                        response_body["UserName"] = request_body["UserName"]
+                        response_body["UserInfo"]["UserBiography"] = UserInfo[0]
+                        response_body["UserInfo"]["UserCreatedDate"] = UserInfo[1]
+                        return starlette.responses.JSONResponse(response_body)
+                else:
+                    return starlette.responses.Response(status_code=401)
             else:
-                return starlette.responses.Response(status_code=404)
+                return starlette.responses.Response(status_code=400)
 
     class Files(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
@@ -525,7 +530,9 @@ class User:
                 "UserName": None
             }
             if "UserName" in request_body and "UserPassword" in request_body:
-                if await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"]):
+                if await iamagesdb.fetch_one("SELECT UserID FROM Users WHERE UserName = :UserName", {
+                    "UserName": request_body["UserName"]
+                }):
                     return starlette.responses.JSONResponse(response_body, status_code=403)
                 else:
                     await iamagesdb.execute("INSERT INTO Users (UserName, UserPassword, UserCreatedDate) VALUES (:UserName, :UserPassword, datetime('now'))", {
@@ -568,7 +575,7 @@ app = starlette.applications.Starlette(routes=[
         starlette.routing.Route("/embed/{FileID:int}", Embed, name="embed"),
         starlette.routing.Route("/img/{FileID:int}", Img, name="img"),
         starlette.routing.Mount("/user", routes=[
-            starlette.routing.Route("/info/{UserName:str}", User.Info),
+            starlette.routing.Route("/info", User.Info),
             starlette.routing.Route("/files", User.Files),
             starlette.routing.Route("/modify", User.Modify),
             starlette.routing.Route("/new", User.New),
