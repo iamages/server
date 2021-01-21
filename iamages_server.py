@@ -508,8 +508,8 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
             return starlette.responses.RedirectResponse(request.url_for("info", FileID=FileID), background=bg_task)
 
     async def create_thumb(self, FileID, FileName, FileMime):
-        new_thumb_path = os.path.join(THUMBS_PATH, FileID, FileName)
-        with PIL.Image.open(os.path.join(FILES_PATH, FileID, FileName)) as img:
+        new_thumb_path = os.path.join(THUMBS_PATH, str(FileID), FileName)
+        with PIL.Image.open(os.path.join(FILES_PATH, str(FileID), FileName)) as img:
             img.thumbnail((200, 200))
             if FileMime == "image/gif":
                 img.save(new_thumb_path, save_all=True)
