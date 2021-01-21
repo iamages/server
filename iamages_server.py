@@ -49,6 +49,7 @@ class SharedFunctions:
     @staticmethod
     async def delete_file(FileID: int):
         ex_file_directory = os.path.join(FILES_PATH, str(FileID))
+        ex_thumb_directory = os.path.join(THUMBS_PATH, str(FileID))
         file_links = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FileLink = :FileID", {
             "FileID": FileID
         })
@@ -59,10 +60,20 @@ class SharedFunctions:
             new_file_directory = os.path.join(FILES_PATH, str(file_links[0][0]))
             if not os.path.isdir(new_file_directory):
                 os.makedirs(new_file_directory)
+            new_thumb_directory = os.path.join(THUMBS_PATH, str(file_links[0][0]))
+            if not os.path.isdir(new_thumb_directory):
+                os.makedirs(new_thumb_directory)
             new_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + mimetypes.guess_extension(ex_file_info[1])
             with open(os.path.join(ex_file_directory, ex_file_info[0]), "rb") as ex_file:
                 with open(os.path.join(new_file_directory, new_file_name), "wb") as new_file:
                     new_file.write(ex_file.read())
+            ex_thumb_name = os.path.join(ex_thumb_directory, ex_file_info[0])
+            if os.path.isfile(ex_thumb_name):
+                with open(ex_thumb_name, "rb") as ex_thumb:
+                    with open(os.path.join(new_thumb_directory, new_file_name), "wb") as new_thumb:
+                        new_thumb.write(ex_thumb.read())
+            else:
+                await SharedFunctions.create_thumb(file_links[0][0], new_file_name, ex_file_info[1])
             await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileMime = :FileMime, FileWidth = :FileWidth, FileHeight = :FileHeight, FileHash = :FileHash, FileLink = :FileLink WHERE FileID = :FileID", {
                 "FileName": new_file_name,
                 "FileMime": ex_file_info[1],
@@ -79,6 +90,8 @@ class SharedFunctions:
                 })
         if os.path.isdir(ex_file_directory):
             shutil.rmtree(ex_file_directory)
+        if os.path.isdir(ex_thumb_directory):
+            shutil.rmtree(ex_thumb_directory)
         await iamagesdb.execute("DELETE FROM Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
@@ -87,7 +100,7 @@ class SharedFunctions:
         })
 
     @staticmethod
-    async def check_user(UserName: str, UserPassword: str):
+    async def check_user(UserName: str, UserPassword: str) -> int:
         users = await iamagesdb.fetch_all("SELECT UserID, UserPassword FROM Users WHERE UserName = :UserName", {
             "UserName": UserName
         })
@@ -100,7 +113,7 @@ class SharedFunctions:
             return None
 
     @staticmethod
-    async def check_file_belongs(FileID: int, UserID: int):
+    async def check_file_belongs(FileID: int, UserID: int) -> int:
         if FileID == await iamagesdb.fetch_val("SELECT FileID FROM Files_Users WHERE FileID = :FileID AND UserID = :UserID", {
             "FileID": FileID,
             "UserID": UserID
@@ -110,7 +123,7 @@ class SharedFunctions:
             return None
 
     @staticmethod
-    async def process_auth_header(headers: list):
+    async def process_auth_header(headers: list) -> int:
         if "Authorization" not in headers:
             return None
         auth = headers["Authorization"]
@@ -128,6 +141,19 @@ class SharedFunctions:
             return UserID
         else:
             return None
+
+    @staticmethod
+    async def create_thumb(FileID: int, FileName: str, FileMime: str) -> None:
+        thumb_folder_path = os.path.join(THUMBS_PATH, str(FileID))
+        if not os.path.isdir(thumb_folder_path):
+            os.makedirs(thumb_folder_path)
+        new_thumb_path = os.path.join(thumb_folder_path, FileName)
+        with PIL.Image.open(os.path.join(FILES_PATH, str(FileID), FileName)) as img:
+            img.thumbnail((200, 200))
+            if FileMime == "image/gif":
+                img.save(new_thumb_path, save_all=True)
+            else:
+                img.save(new_thumb_path)
 
 
 class Private:
@@ -238,11 +264,8 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     return starlette.responses.JSONResponse(response_body)
                 else:
                     file_folder_path = os.path.join(FILES_PATH, str(FileID))
-                    thumb_folder_path = os.path.join(THUMBS_PATH, str(FileID))
                     if not os.path.isdir(file_folder_path):
                         os.makedirs(file_folder_path)
-                    if not os.path.isdir(thumb_folder_path):
-                        os.makedirs(thumb_folder_path)
                     file_path = os.path.join(file_folder_path, "unprocessed.image")
                     with open(file_path, "wb") as file:
                         file.write(FileData)
@@ -250,7 +273,6 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     if file_type.mime in server_config["files"]["accept_filemimes"]:
                         random_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + "." + file_type.extension
                         new_file_path = os.path.join(file_folder_path, random_file_name)
-                        new_thumb_path = os.path.join(thumb_folder_path, random_file_name)
                         with PIL.Image.open(file_path) as img:
                             if file_type.mime == "image/gif":
                                 img.save(new_file_path, save_all=True)
@@ -264,12 +286,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                                 "FileHash": FileHash,
                                 "FileID": FileID
                             })
-                        with PIL.Image.open(file_path) as img:
-                            img.thumbnail((200, 200))
-                            if file_type.mime == "image/gif":
-                                img.save(new_thumb_path, save_all=True)
-                            else:
-                                img.save(new_thumb_path)
+                        await SharedFunctions.create_thumb(FileID, random_file_name, file_type.mime)
                         os.remove(file_path)
                         if UserID:
                             await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
@@ -446,9 +463,10 @@ class Img(starlette.endpoints.HTTPEndpoint):
     async def send_img(self, FileID, FileInformation):
         FileMime = FileInformation[2]
         if FileInformation[3]:
-            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName FROM Files WHERE FileID = :FileID", {
+            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
                 "FileID": FileInformation[3]
             })
+            FileMime = linked_FileInformation[1]
             file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
         else:
             file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
@@ -490,10 +508,11 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
         FileID = FileID
         if FileInformation[3]:
             FileID = FileInformation[3]
-            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName FROM Files WHERE FileID = :FileID", {
-                FileID: FileID
+            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
+                "FileID": FileID
             })
             FileName = linked_FileInformation[0]
+            FileMime = linked_FileInformation[1]
             thumb_path = os.path.join(THUMBS_PATH, str(FileInformation[3]), FileName)
         else:
             FileName = FileInformation[0]
@@ -504,17 +523,8 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
                     "Content-Type": FileMime
                 })
         else:
-            bg_task = starlette.background.BackgroundTask(self.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
+            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
             return starlette.responses.RedirectResponse(request.url_for("info", FileID=FileID), background=bg_task)
-
-    async def create_thumb(self, FileID, FileName, FileMime):
-        new_thumb_path = os.path.join(THUMBS_PATH, str(FileID), FileName)
-        with PIL.Image.open(os.path.join(FILES_PATH, str(FileID), FileName)) as img:
-            img.thumbnail((200, 200))
-            if FileMime == "image/gif":
-                img.save(new_thumb_path, save_all=True)
-            else:
-                img.save(new_thumb_path)
 
 
 class User:
@@ -615,7 +625,7 @@ class User:
                 if await iamagesdb.fetch_one("SELECT UserID FROM Users WHERE UserName = :UserName", {
                     "UserName": request_body["UserName"]
                 }):
-                    return starlette.responses.JSONResponse(response_body, status_code=403)
+                    return starlette.responses.Response(status_code=403)
                 else:
                     await iamagesdb.execute("INSERT INTO Users (UserName, UserPassword, UserCreatedDate) VALUES (:UserName, :UserPassword, datetime('now'))", {
                         "UserName": request_body["UserName"],
