@@ -487,9 +487,11 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
     async def send_thumb(self, FileID, FileInformation, request):
         FileMime = FileInformation[2]
         FileName = str(FileInformation[0])
+        FileID = FileID
         if FileInformation[3]:
+            FileID = FileInformation[3]
             linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName FROM Files WHERE FileID = :FileID", {
-                FileID: FileInformation[3]
+                FileID: FileID
             })
             FileName = linked_FileInformation[0]
             thumb_path = os.path.join(THUMBS_PATH, str(FileInformation[3]), FileName)
