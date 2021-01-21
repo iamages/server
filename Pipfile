@@ -8,11 +8,11 @@ starlette = "*"
 jinja2 = "*"
 aiofiles = "*"
 databases = {extras = ["sqlite"], version = "*"}
-python-magic = "*"
 bcrypt = "*"
 pillow = "*"
 gunicorn = "*"
 uvicorn = {extras = ["standard"], version = "*"}
+filetype = "*"
 
 [dev-packages]
 

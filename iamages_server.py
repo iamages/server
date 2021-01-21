@@ -9,7 +9,7 @@ import random
 import bcrypt
 import base64
 import hashlib
-import magic
+import filetype
 import string
 import mimetypes
 import PIL.Image
@@ -19,6 +19,7 @@ import starlette.routing
 import starlette.staticfiles
 import starlette.templating
 import starlette.middleware
+import starlette.background
 import starlette.middleware.cors
 import starlette.middleware.gzip
 import starlette.responses
@@ -37,7 +38,12 @@ FILES_PATH = os.path.join(server_config["files"]["storage"]["directory"], "files
 if not os.path.isdir(FILES_PATH):
     os.makedirs(FILES_PATH)
 
+THUMBS_PATH = os.path.join(server_config["files"]["storage"]["directory"], "thumbs")
+if not os.path.isdir(THUMBS_PATH):
+    os.makedirs(THUMBS_PATH)
+
 templates = starlette.templating.Jinja2Templates(directory=os.path.join(IAMAGES_PATH, "templates"))
+
 
 class SharedFunctions:
     @staticmethod
@@ -139,6 +145,7 @@ class Private:
                 "owner": server_config["meta"]["owner"]
             })
 
+
 class Docs(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
         return templates.TemplateResponse("api-doc.html", {
@@ -146,6 +153,7 @@ class Docs(starlette.endpoints.HTTPEndpoint):
             "supported_filemimes": server_config["files"]["accept_filemimes"],
             "owner": server_config["meta"]["owner"]
         })
+
 
 class Latest(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
@@ -156,6 +164,7 @@ class Latest(starlette.endpoints.HTTPEndpoint):
         for FileID in FileIDs:
             response_body["FileIDs"].append(FileID[0])
         return starlette.responses.JSONResponse(response_body)
+
 
 class Random(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
@@ -177,6 +186,7 @@ class Random(starlette.endpoints.HTTPEndpoint):
                 return starlette.responses.Response(status_code=503)
         else:
             return starlette.responses.Response(status_code=503)
+
 
 class Upload(starlette.endpoints.HTTPEndpoint):
     async def put(self, request):
@@ -228,17 +238,21 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     return starlette.responses.JSONResponse(response_body)
                 else:
                     file_folder_path = os.path.join(FILES_PATH, str(FileID))
+                    thumb_folder_path = os.path.join(THUMBS_PATH, str(FileID))
                     if not os.path.isdir(file_folder_path):
                         os.makedirs(file_folder_path)
+                    if not os.path.isdir(thumb_folder_path):
+                        os.makedirs(thumb_folder_path)
                     file_path = os.path.join(file_folder_path, "unprocessed.image")
                     with open(file_path, "wb") as file:
                         file.write(FileData)
-                    FileMime = magic.from_file(file_path, mime=True)
-                    if FileMime in server_config["files"]["accept_filemimes"]:
-                        random_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + mimetypes.guess_extension(FileMime)
+                    file_type = filetype.guess(file_path)
+                    if file_type.mime in server_config["files"]["accept_filemimes"]:
+                        random_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + "." + file_type.extension
                         new_file_path = os.path.join(file_folder_path, random_file_name)
+                        new_thumb_path = os.path.join(thumb_folder_path, random_file_name)
                         with PIL.Image.open(file_path) as img:
-                            if FileMime == "image/gif":
+                            if file_type.mime == "image/gif":
                                 img.save(new_file_path, save_all=True)
                             else:
                                 img.save(new_file_path)
@@ -246,10 +260,16 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                                 "FileName": random_file_name,
                                 "FileWidth": img.size[0],
                                 "FileHeight": img.size[1],
-                                "FileMime": FileMime,
+                                "FileMime": file_type.mime,
                                 "FileHash": FileHash,
                                 "FileID": FileID
                             })
+                        with PIL.Image.open(file_path) as img:
+                            img.thumbnail((200, 200))
+                            if file_type.mime == "image/gif":
+                                img.save(new_thumb_path, save_all=True)
+                            else:
+                                img.save(new_thumb_path)
                         os.remove(file_path)
                         if UserID:
                             await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
@@ -258,7 +278,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                             })
                             if "FilePrivate" in request_body:
                                 await iamagesdb.execute(default_query_FilePrivate, {
-                                    "FilePrivate": request_body["FilePrivate"]
+                                    "FilePrivate": bool(request_body["FilePrivate"])
                                 })
                             else:
                                 await iamagesdb.execute(default_query_FilePrivate, {
@@ -266,7 +286,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                                 })
                         else:
                             await iamagesdb.execute(default_query_FilePrivate, {
-                                    "FilePrivate": False
+                                "FilePrivate": False
                             })
                     else:
                         await SharedFunctions.delete_file(FileID)
@@ -277,6 +297,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                 return starlette.responses.Response(status_code=413)
         else:
             return starlette.responses.Response(status_code=400)
+
 
 class Modify(starlette.endpoints.HTTPEndpoint):
     async def patch(self, request):
@@ -308,6 +329,7 @@ class Modify(starlette.endpoints.HTTPEndpoint):
                 return starlette.responses.Response(status_code=401)
         else:
             return starlette.responses.Response(status_code=400)
+
 
 class Info(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
@@ -357,6 +379,7 @@ class Info(starlette.endpoints.HTTPEndpoint):
             await set_response(FileInformation)
         return starlette.responses.JSONResponse(response_body)
 
+
 class Embed(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
         response_template = {
@@ -397,6 +420,7 @@ class Embed(starlette.endpoints.HTTPEndpoint):
             response_template["FileDescription"] = "The requested file couldn't be found. Ran memcheck yet? 🐿"
             return templates.TemplateResponse("embed.html", response_template, status_code=404)
 
+
 class Img(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
         FileID = int(request.path_params["FileID"])
@@ -404,39 +428,92 @@ class Img(starlette.endpoints.HTTPEndpoint):
             "FileID": FileID
         })
 
-        async def send_img():
-            FileMime = FileInformation[2]
-            if FileInformation[3]:
-                linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
-                    "FileID": FileInformation[3]
-                })
-                file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
-                FileMime = linked_FileInformation[1]
-            else:
-                file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
-            
-            if os.path.isfile(file_path):
-                with open(file_path, "rb") as file:
-                    return starlette.responses.Response(file.read(), headers={
-                        "Content-Type": FileMime
-                    })
-            else:
-                return starlette.responses.Response(status_code=404)
-
         if FileInformation:
-            if FileInformation[1]:
+            if bool(FileInformation[1]):
                 UserID = await SharedFunctions.process_auth_header(request.headers)
                 if UserID:
                     if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                        return await send_img()
+                        return await self.send_img(FileID, FileInformation)
                     else:
                         return starlette.responses.Response(status_code=401)
                 else:
                     return starlette.responses.Response(status_code=401)
             else:
-                return await send_img()
+                return await self.send_img(FileID, FileInformation)
         else:
             return starlette.responses.Response(status_code=404)
+
+    async def send_img(self, FileID, FileInformation):
+        FileMime = FileInformation[2]
+        if FileInformation[3]:
+            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName FROM Files WHERE FileID = :FileID", {
+                "FileID": FileInformation[3]
+            })
+            file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
+        else:
+            file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
+        
+        if os.path.isfile(file_path):
+            with open(file_path, "rb") as file:
+                return starlette.responses.Response(file.read(), headers={
+                    "Content-Type": FileMime
+                })
+        else:
+            return starlette.responses.Response(status_code=404)
+
+
+class Thumb(starlette.endpoints.HTTPEndpoint):
+    async def get(self, request):
+        FileID = int(request.path_params["FileID"])
+        FileInformation = await iamagesdb.fetch_one("SELECT FileName, FilePrivate, FileMime, FileLink FROM Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
+                
+        if FileInformation:
+            if bool(FileInformation[1]):
+                UserID = await SharedFunctions.process_auth_header(request.headers)
+                if UserID:
+                    if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
+                        return await self.send_thumb(FileID, FileInformation, request)
+                    else:
+                        return starlette.responses.Response(status_code=401)
+                else:
+                    return starlette.responses.Response(status_code=401)
+            else:
+                return await self.send_thumb(FileID, FileInformation, request)
+        else:
+            return starlette.responses.Response(status_code=404)
+
+    async def send_thumb(self, FileID, FileInformation, request):
+        FileMime = FileInformation[2]
+        FileName = str(FileInformation[0])
+        if FileInformation[3]:
+            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName FROM Files WHERE FileID = :FileID", {
+                FileID: FileInformation[3]
+            })
+            FileName = linked_FileInformation[0]
+            thumb_path = os.path.join(THUMBS_PATH, str(FileInformation[3]), FileName)
+        else:
+            FileName = FileInformation[0]
+            thumb_path = os.path.join(THUMBS_PATH, str(FileID), FileName)
+        if os.path.isfile(thumb_path):
+            with open(thumb_path, "rb") as thumb:
+                return starlette.responses.Response(thumb.read(), headers={
+                    "Content-Type": FileMime
+                })
+        else:
+            bg_task = starlette.background.BackgroundTask(self.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
+            return starlette.responses.RedirectResponse(request.url_for("info", FileID=FileID), background=bg_task)
+
+    async def create_thumb(self, FileID, FileName, FileMime):
+        new_thumb_path = os.path.join(THUMBS_PATH, FileID, FileName)
+        with PIL.Image.open(os.path.join(FILES_PATH, FileID, FileName)) as img:
+            img.thumbnail((200, 200))
+            if FileMime == "image/gif":
+                img.save(new_thumb_path, save_all=True)
+            else:
+                img.save(new_thumb_path)
+
 
 class User:
     class Info(starlette.endpoints.HTTPEndpoint):
@@ -462,6 +539,7 @@ class User:
             else:
                 return starlette.responses.Response(status_code=400)
 
+
     class Files(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
             request_body = await request.json()
@@ -483,6 +561,7 @@ class User:
                     return starlette.responses.Response(status_code=401)
             else:
                 return starlette.responses.Response(status_code=400)
+
 
     class Modify(starlette.endpoints.HTTPEndpoint):
         async def patch(self, request):
@@ -523,6 +602,7 @@ class User:
             else:
                 return starlette.responses.Response(status_code=400)
 
+
     class New(starlette.endpoints.HTTPEndpoint):
         async def put(self, request):
             request_body = await request.json()
@@ -544,6 +624,7 @@ class User:
             else:
                 return starlette.responses.Response(status_code=400)
     
+
     class Check(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
             request_body = await request.json()
@@ -574,6 +655,7 @@ app = starlette.applications.Starlette(routes=[
         starlette.routing.Route("/info/{FileID:int}", Info, name="info"),
         starlette.routing.Route("/embed/{FileID:int}", Embed, name="embed"),
         starlette.routing.Route("/img/{FileID:int}", Img, name="img"),
+        starlette.routing.Route("/thumb/{FileID:int}", Thumb, name="thumb"),
         starlette.routing.Mount("/user", routes=[
             starlette.routing.Route("/info", User.Info),
             starlette.routing.Route("/files", User.Files),

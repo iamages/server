@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "793b31c236f84f55a883a88a4d1673d3c3e694b9a2a8a320c38af5bbe7c40609"
+            "sha256": "27ab93ed96eaf159fb3832fbe554588f2b12d473fa4396ec464ecb940957ea5d"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -103,6 +103,14 @@
             ],
             "index": "pypi",
             "version": "==0.4.1"
+        },
+        "filetype": {
+            "hashes": [
+                "sha256:353369948bb1c09b8b3ea3d78390b5586e9399bff9aab894a1dff954e31a66f6",
+                "sha256:da393ece8d98b47edf2dd5a85a2c8733e44b769e32c71af4cd96ed8d38d96aa7"
+            ],
+            "index": "pypi",
+            "version": "==1.0.7"
         },
         "gunicorn": {
             "hashes": [
@@ -236,14 +244,6 @@
                 "sha256:587825ed60b1711daea4832cf37524dfd404325b7db5e25ebe88c495c9f807a0"
             ],
             "version": "==0.15.0"
-        },
-        "python-magic": {
-            "hashes": [
-                "sha256:0cc52ccad086c377b9194014e3dbf98d94b194344630172510a6a3e716b47801",
-                "sha256:33ce94d9395aa269a9c5fac10ae124a5fb328ebe248f36efc5a43922edee662e"
-            ],
-            "index": "pypi",
-            "version": "==0.4.20"
         },
         "pyyaml": {
             "hashes": [
