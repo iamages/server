@@ -149,7 +149,7 @@ class SharedFunctions:
             os.makedirs(thumb_folder_path)
         new_thumb_path = os.path.join(thumb_folder_path, FileName)
         with PIL.Image.open(os.path.join(FILES_PATH, str(FileID), FileName)) as img:
-            img.thumbnail((200, 200))
+            img.thumbnail((600, 600), PIL.Image.LANCZOS)
             if FileMime == "image/gif":
                 img.save(new_thumb_path, save_all=True)
             else:
@@ -286,7 +286,6 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                                 "FileHash": FileHash,
                                 "FileID": FileID
                             })
-                        await SharedFunctions.create_thumb(FileID, random_file_name, file_type.mime)
                         os.remove(file_path)
                         if UserID:
                             await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
@@ -309,7 +308,8 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                         await SharedFunctions.delete_file(FileID)
                         return starlette.responses.Response(status_code=415)
                     response_body["FileID"] = FileID
-                    return starlette.responses.JSONResponse(response_body)
+                    bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=random_file_name, FileMime=file_type.mime)
+                    return starlette.responses.JSONResponse(response_body, background=bg_task)
             else:
                 return starlette.responses.Response(status_code=413)
         else:
