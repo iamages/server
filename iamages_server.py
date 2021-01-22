@@ -524,7 +524,7 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
                 })
         else:
             bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
-            return starlette.responses.RedirectResponse(request.url_for("info", FileID=FileID), background=bg_task)
+            return starlette.responses.RedirectResponse(request.url_for("img", FileID=FileID), background=bg_task)
 
 
 class User:
