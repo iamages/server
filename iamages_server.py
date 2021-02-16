@@ -1,4 +1,4 @@
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __copyright__ = "© jkelol111 et al 2020-present"
 
 import os
@@ -27,6 +27,12 @@ import starlette.responses
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 
 server_config = json.load(open("servercfg.json", "r"))
+
+SUPPORTED_FORMAT = 2
+
+if server_config["files"]["storage"]["format"] != SUPPORTED_FORMAT:
+    print(f'Current storage format is not supported. (expected: {SUPPORTED_FORMAT}, got: {server_config["files"]["format"]})')
+    exit(1) 
 
 if not os.path.isdir(server_config["files"]["storage"]["directory"]):
     os.makedirs(server_config["files"]["storage"]["directory"])
@@ -186,7 +192,7 @@ class Latest(starlette.endpoints.HTTPEndpoint):
         response_body = {
             "FileIDs": []
         }
-        FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FilePrivate = 0 ORDER BY FileID DESC LIMIT 10")
+        FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FilePrivate = 0 AND FileExcludeSearch = 0 ORDER BY FileID DESC LIMIT 10")
         for FileID in FileIDs:
             response_body["FileIDs"].append(FileID[0])
         return starlette.responses.JSONResponse(response_body)
@@ -200,7 +206,7 @@ class Random(starlette.endpoints.HTTPEndpoint):
             attempts = 0
             while successful_FileID == 0 and attempts <= 3:
                 successful_FileID = random.randint(1, total_files)
-                actual_successful_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0", {
+                actual_successful_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0 AND FileExcludeSearch = 0", {
                     "FileID": successful_FileID
                 })
                 if not actual_successful_FileID:
@@ -238,6 +244,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     "FileHash": FileHash
                 })
                 default_query_FilePrivate = "UPDATE Files SET FilePrivate = :FilePrivate WHERE FileID = " + str(FileID)
+                default_query_FileExcludeSearch = "UPDATE Files SET FileExcludeSearch = :FileExcludeSearch WHERE FileID = " + str(FileID)
                 if duplicate_exists:
                     await iamagesdb.execute("UPDATE Files SET FileLink = :FileLink WHERE FileID = :FileID", {
                         "FileLink": duplicate_exists[0][0],
@@ -259,6 +266,14 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     else:
                         await iamagesdb.execute(default_query_FilePrivate, {
                                 "FilePrivate": False
+                        })
+                    if "FileExcludeSearch" in request_body:
+                        await iamagesdb.execute(default_query_FileExcludeSearch, {
+                            "FileExcludeSearch": request_body["FileExcludeSearch"]
+                        })
+                    else:
+                        await iamagesdb.execute(default_query_FileExcludeSearch, {
+                            "FileExcludeSearch": False
                         })
                     response_body["FileID"] = FileID
                     return starlette.responses.JSONResponse(response_body)
@@ -304,6 +319,14 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                             await iamagesdb.execute(default_query_FilePrivate, {
                                 "FilePrivate": False
                             })
+                        if "FileExcludeSearch" in request_body:
+                            await iamagesdb.execute(default_query_FileExcludeSearch, {
+                                "FileExcludeSearch": request_body["FileExcludeSearch"]
+                            })
+                        else:
+                            await iamagesdb.execute(default_query_FileExcludeSearch, {
+                                "FileExcludeSearch": False
+                            })
                     else:
                         await SharedFunctions.delete_file(FileID)
                         return starlette.responses.Response(status_code=415)
@@ -330,7 +353,7 @@ class Modify(starlette.endpoints.HTTPEndpoint):
                 if FileID == request_body["FileID"]:
                     basic_query = "UPDATE Files SET {0} = :value WHERE FileID = " + str(FileID)
                     for modification in request_body["Modifications"]:
-                        if modification in ["FileDescription", "FileNSFW", "FilePrivate"]:
+                        if modification in ["FileDescription", "FileNSFW", "FilePrivate", "FileExcludeSearch"]:
                             basic_query = basic_query.format(modification)
                             await iamagesdb.execute(basic_query, {
                                 "value": request_body["Modifications"][modification]
@@ -358,7 +381,8 @@ class Info(starlette.endpoints.HTTPEndpoint):
             "FileMime": None,
             "FileWidth": None,
             "FileHeight": None,
-            "FileCreatedDate": None
+            "FileCreatedDate": None,
+            "FileExcludeSearch": None
         }
         async def set_response(FileInformation):
             response_body["FileID"] = int(request.path_params["FileID"])
@@ -377,9 +401,10 @@ class Info(starlette.endpoints.HTTPEndpoint):
                 response_body["FileWidth"] = FileInformation[4]
                 response_body["FileHeight"] = FileInformation[5]
             response_body["FileCreatedDate"] = FileInformation[6]
+            response_body["FileExcludeSearch"] = bool(FileInformation[8])
 
         FileID = int(request.path_params["FileID"])
-        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink FROM Files WHERE FileID = :FileID", {
+        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink, FileExcludeSearch FROM Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
         FilePrivate =  bool(FileInformation[2])

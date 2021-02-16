@@ -9,12 +9,15 @@ CREATE TABLE Files (
     FileHeight INTEGER,
     FileHash TEXT,
     FileLink INTEGER,
-    FileCreatedDate TEXT
+    FileCreatedDate TEXT,
+    FileExcludeSearch INTEGER
 );
+
 CREATE TABLE Files_Users (
     FileID INTEGER,
     UserID INTEGER
 );
+
 CREATE TABLE Users (
     UserID INTEGER PRIMARY KEY,
     UserName TEXT,

@@ -1,5 +1,7 @@
 iamages_storage
+iamages_replicated
 __pycache__
 .vscode
 .DS_Store
 servercfg.json
+replicatorcfg.json
