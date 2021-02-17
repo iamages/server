@@ -354,8 +354,8 @@ class Modify(starlette.endpoints.HTTPEndpoint):
                     basic_query = "UPDATE Files SET {0} = :value WHERE FileID = " + str(FileID)
                     for modification in request_body["Modifications"]:
                         if modification in ["FileDescription", "FileNSFW", "FilePrivate", "FileExcludeSearch"]:
-                            basic_query = basic_query.format(modification)
-                            await iamagesdb.execute(basic_query, {
+                            modification_query = basic_query.format(modification)
+                            await iamagesdb.execute(modification_query, {
                                 "value": request_body["Modifications"][modification]
                             })
                         elif modification == "DeleteFile":
@@ -552,6 +552,26 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
             return starlette.responses.RedirectResponse(request.url_for("img", FileID=FileID), background=bg_task)
 
 
+class Search(starlette.endpoints.HTTPEndpoint):
+    async def post(self, request):
+        request_body = await request.json()
+        response_body = {
+            "FileIDs": [],
+            "SearchTerms": ""
+        }
+
+        UserID = None
+        if "UserName" in request_body and "UserPassword" in request_body:
+            UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+        
+        if "SearchWhere" in request_body and "SearchTerms" in request_body:
+            if request_body["SearchWhere"] == "public":
+
+                FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE instr(FileDescription, :SearchTerms) > 0 AND FileExcludeSearch = 0 AND FilePrivate = 0", {
+                    "SearchTerms": request_body["SearchTerms"]
+                })
+
+
 class User:
     class Info(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
@@ -613,8 +633,8 @@ class User:
                     basic_query = "UPDATE Users SET {0} = :value WHERE UserID = " + str(UserID)
                     for modification in request_body["Modifications"]:
                         if modification in ["UserBiography", "UserName"]:
-                            basic_query = basic_query.format(modification)
-                            await iamagesdb.execute(basic_query, {
+                            modification_query = basic_query.format(modification)
+                            await iamagesdb.execute(modification_query, {
                                 "value": request_body["Modifications"][modification]
                             })
                         elif modification == "UserPassword":
