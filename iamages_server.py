@@ -201,178 +201,221 @@ class Latest(starlette.endpoints.HTTPEndpoint):
 class Random(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
         total_files = await iamagesdb.fetch_val("SELECT COUNT(FileID) FROM Files")
-        if total_files > 1:
-            successful_FileID = 0
-            attempts = 0
-            while successful_FileID == 0 and attempts <= 3:
-                successful_FileID = random.randint(1, total_files)
-                actual_successful_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0 AND FileExcludeSearch = 0", {
-                    "FileID": successful_FileID
-                })
-                if not actual_successful_FileID:
-                    successful_FileID = 0
-                    attempts += 1
-            if successful_FileID != 0:
-                return starlette.responses.RedirectResponse(request.url_for("info", FileID=successful_FileID))
-            else:
-                return starlette.responses.Response(status_code=503)
-        else:
+        if not total_files > 1:
             return starlette.responses.Response(status_code=503)
+
+        FileID = 0
+
+        while FileID == 0:
+            FileID = random.randint(1, total_files)
+            test_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0 AND FileExcludeSearch = 0", {
+                "FileID": FileID
+            })
+            if not test_FileID:
+                FileID = 0
+
+        if FileID == 0:
+            return starlette.responses.Response(status_code=503)
+        
+        return starlette.responses.RedirectResponse(request.url_for("info", FileID=FileID))
 
 
 class Upload(starlette.endpoints.HTTPEndpoint):
     async def put(self, request):
         request_body = await request.json()
+
+        if "FileData" not in request_body or "FileNSFW" not in request_body or "FileDescription" not in request_body or type(request_body["FileData"]) != str or type(request_body["FileNSFW"]) != bool or type(request_body["FileDescription"]) != str:
+            return starlette.responses.Response(status_code=400)
+
+        UserID = None
+
+        if "UserName" in request_body and "UserPassword" in request_body and type(request_body["UserName"]) == str and type(request_body["UserPassword"]) == str:
+            UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+            if not UserID:
+                return starlette.responses.Response(status_code=401)
+
+        if not ((len(request_body["FileData"]) * 3) / 4) < server_config["files"]["max_size"]:
+            return starlette.responses.Response(status_code=413)
+
+        await iamagesdb.execute("INSERT INTO Files (FileDescription, FileNSFW, FileCreatedDate) VALUES (:FileDescription, :FileNSFW, datetime('now'))", {
+            "FileDescription": request_body["FileDescription"],
+            "FileNSFW": request_body["FileNSFW"]
+        })
+
+        FileID = (await iamagesdb.fetch_one("SELECT FileID FROM Files ORDER BY FileID DESC"))[0]
+        FileData = base64.b64decode(request_body["FileData"])
+        FileHash = hashlib.blake2b(FileData).hexdigest()
+
+        duplicate_exists = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FileHash = :FileHash AND FilePrivate = 0", {
+            "FileHash": FileHash
+        })
+
+        default_query_FilePrivate = "UPDATE Files SET FilePrivate = :FilePrivate WHERE FileID = " + str(FileID)
+        default_query_FileExcludeSearch = "UPDATE Files SET FileExcludeSearch = :FileExcludeSearch WHERE FileID = " + str(FileID)
+
         response_body = {
             "FileID": None
         }
-        if "FileData" in request_body and "FileNSFW" in request_body and "FileDescription" in request_body:
-            UserID = None
-            if "UserName" in request_body and "UserPassword" in request_body:
-                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-                if not UserID:
-                    return starlette.responses.Response(status_code=401)
-            if ((len(request_body["FileData"]) * 3) / 4) < server_config["files"]["max_size"]:
-                await iamagesdb.execute("INSERT INTO Files (FileDescription, FileNSFW, FileCreatedDate) VALUES (:FileDescription, :FileNSFW, datetime('now'))", {
-                    "FileDescription": request_body["FileDescription"],
-                    "FileNSFW": request_body["FileNSFW"]
+
+        if duplicate_exists:
+            await iamagesdb.execute("UPDATE Files SET FileLink = :FileLink WHERE FileID = :FileID", {
+                "FileLink": duplicate_exists[0][0],
+                "FileID": FileID
+            })
+            if UserID:
+                await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
+                    "FileID": FileID,
+                    "UserID": UserID
                 })
-                FileID = (await iamagesdb.fetch_one("SELECT FileID FROM Files ORDER BY FileID DESC"))[0]
-                FileData = base64.b64decode(request_body["FileData"])
-                FileHash = hashlib.blake2b(FileData).hexdigest()
-                duplicate_exists = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FileHash = :FileHash AND FilePrivate = 0", {
-                    "FileHash": FileHash
-                })
-                default_query_FilePrivate = "UPDATE Files SET FilePrivate = :FilePrivate WHERE FileID = " + str(FileID)
-                default_query_FileExcludeSearch = "UPDATE Files SET FileExcludeSearch = :FileExcludeSearch WHERE FileID = " + str(FileID)
-                if duplicate_exists:
-                    await iamagesdb.execute("UPDATE Files SET FileLink = :FileLink WHERE FileID = :FileID", {
-                        "FileLink": duplicate_exists[0][0],
-                        "FileID": FileID
+                if "FilePrivate" in request_body and type(request_body["FilePrivate"]) == bool:
+                    await iamagesdb.execute(default_query_FilePrivate, {
+                        "FilePrivate": request_body["FilePrivate"]
                     })
-                    if UserID:
-                        await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
-                            "FileID": FileID,
-                            "UserID": UserID
-                        })
-                        if "FilePrivate" in request_body:
-                            await iamagesdb.execute(default_query_FilePrivate, {
-                                "FilePrivate": request_body["FilePrivate"]
-                            })
-                        else:
-                            await iamagesdb.execute(default_query_FilePrivate, {
-                                "FilePrivate": False
-                            })
-                    else:
-                        await iamagesdb.execute(default_query_FilePrivate, {
-                                "FilePrivate": False
-                        })
-                    if "FileExcludeSearch" in request_body:
-                        await iamagesdb.execute(default_query_FileExcludeSearch, {
-                            "FileExcludeSearch": request_body["FileExcludeSearch"]
-                        })
-                    else:
-                        await iamagesdb.execute(default_query_FileExcludeSearch, {
-                            "FileExcludeSearch": False
-                        })
-                    response_body["FileID"] = FileID
-                    return starlette.responses.JSONResponse(response_body)
                 else:
-                    file_folder_path = os.path.join(FILES_PATH, str(FileID))
-                    if not os.path.isdir(file_folder_path):
-                        os.makedirs(file_folder_path)
-                    file_path = os.path.join(file_folder_path, "unprocessed.image")
-                    with open(file_path, "wb") as file:
-                        file.write(FileData)
-                    file_type = filetype.guess(file_path)
-                    if file_type.mime in server_config["files"]["accept_filemimes"]:
-                        random_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + "." + file_type.extension
-                        new_file_path = os.path.join(file_folder_path, random_file_name)
-                        with PIL.Image.open(file_path) as img:
-                            if file_type.mime == "image/gif":
-                                img.save(new_file_path, save_all=True)
-                            else:
-                                img.save(new_file_path)
-                            await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
-                                "FileName": random_file_name,
-                                "FileWidth": img.size[0],
-                                "FileHeight": img.size[1],
-                                "FileMime": file_type.mime,
-                                "FileHash": FileHash,
-                                "FileID": FileID
-                            })
-                        os.remove(file_path)
-                        if UserID:
-                            await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
-                                "FileID": FileID,
-                                "UserID": UserID
-                            })
-                            if "FilePrivate" in request_body:
-                                await iamagesdb.execute(default_query_FilePrivate, {
-                                    "FilePrivate": bool(request_body["FilePrivate"])
-                                })
-                            else:
-                                await iamagesdb.execute(default_query_FilePrivate, {
-                                    "FilePrivate": False
-                                })
-                        else:
-                            await iamagesdb.execute(default_query_FilePrivate, {
-                                "FilePrivate": False
-                            })
-                        if "FileExcludeSearch" in request_body:
-                            await iamagesdb.execute(default_query_FileExcludeSearch, {
-                                "FileExcludeSearch": request_body["FileExcludeSearch"]
-                            })
-                        else:
-                            await iamagesdb.execute(default_query_FileExcludeSearch, {
-                                "FileExcludeSearch": False
-                            })
-                    else:
-                        await SharedFunctions.delete_file(FileID)
-                        return starlette.responses.Response(status_code=415)
-                    response_body["FileID"] = FileID
-                    bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=random_file_name, FileMime=file_type.mime)
-                    return starlette.responses.JSONResponse(response_body, background=bg_task)
+                    await iamagesdb.execute(default_query_FilePrivate, {
+                        "FilePrivate": False
+                    })
             else:
-                return starlette.responses.Response(status_code=413)
+                await iamagesdb.execute(default_query_FilePrivate, {
+                    "FilePrivate": False
+                })
+
+            if "FileExcludeSearch" in request_body and type(request_body["FileExcludeSearch"]) == bool:
+                await iamagesdb.execute(default_query_FileExcludeSearch, {
+                    "FileExcludeSearch": request_body["FileExcludeSearch"]
+                })
+            else:
+                await iamagesdb.execute(default_query_FileExcludeSearch, {
+                    "FileExcludeSearch": False
+                })
+
+            response_body["FileID"] = FileID
+            return starlette.responses.JSONResponse(response_body)
         else:
-            return starlette.responses.Response(status_code=400)
+            file_folder_path = os.path.join(FILES_PATH, str(FileID))
+            if not os.path.isdir(file_folder_path):
+                os.makedirs(file_folder_path)
+
+            file_path = os.path.join(file_folder_path, "unprocessed.image")
+            with open(file_path, "wb") as file:
+                file.write(FileData)
+
+            file_type = filetype.guess(file_path)
+            if file_type.mime not in server_config["files"]["accept_filemimes"]:
+                await SharedFunctions.delete_file(FileID)
+                return starlette.responses.Response(status_code=415)
+
+            random_file_name = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + "." + file_type.extension
+
+            new_file_path = os.path.join(file_folder_path, random_file_name)
+
+            with PIL.Image.open(file_path) as img:
+                if file_type.mime == "image/gif":
+                    img.save(new_file_path, save_all=True)
+                else:
+                    img.save(new_file_path)
+                await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
+                    "FileName": random_file_name,
+                    "FileWidth": img.size[0],
+                    "FileHeight": img.size[1],
+                    "FileMime": file_type.mime,
+                    "FileHash": FileHash,
+                    "FileID": FileID
+                })
+
+            os.remove(file_path)
+
+            if UserID:
+                await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
+                    "FileID": FileID,
+                    "UserID": UserID
+                })
+                if "FilePrivate" in request_body and type(request_body["FilePrivate"]) == bool:
+                    await iamagesdb.execute(default_query_FilePrivate, {
+                        "FilePrivate": request_body["FilePrivate"]
+                    })
+                else:
+                    await iamagesdb.execute(default_query_FilePrivate, {
+                        "FilePrivate": False
+                    })
+            else:
+                await iamagesdb.execute(default_query_FilePrivate, {
+                    "FilePrivate": False
+                })
+
+            if "FileExcludeSearch" in request_body and type(request_body["FileExcludeSearch"]) == bool:
+                await iamagesdb.execute(default_query_FileExcludeSearch, {
+                    "FileExcludeSearch": request_body["FileExcludeSearch"]
+                })
+            else:
+                await iamagesdb.execute(default_query_FileExcludeSearch, {
+                    "FileExcludeSearch": False
+                })
+                
+            response_body["FileID"] = FileID
+            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=random_file_name, FileMime=file_type.mime)
+            return starlette.responses.JSONResponse(response_body, background=bg_task)
 
 
 class Modify(starlette.endpoints.HTTPEndpoint):
     async def patch(self, request):
         request_body = await request.json()
+
+        if "UserName" not in request_body or "UserPassword" not in request_body or "FileID" not in request_body or "Modifications" not in request_body or type(request_body["UserName"]) != str or type(request_body["UserPassword"]) != str or type(request_body["FileID"]) != int or type(request_body["Modifications"]) != dict:
+            return starlette.responses.Response(status_code=400)
+
+        UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+
+        if not UserID:
+            return starlette.responses.Response(status_code=401)
+
+        FileID = await SharedFunctions.check_file_belongs(request_body["FileID"], UserID)
+        if FileID != request_body["FileID"]:
+            return starlette.responses.Response(status_code=404)
+
+        basic_query = "UPDATE Files SET {0} = :value WHERE FileID = " + str(FileID)
+
         response_body = {
             "FileID": None,
             "Modifications": []
         }
-        if "UserName" in request_body and "UserPassword" in request_body and "FileID" in request_body and "Modifications" in request_body:
-            UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-            if UserID:
-                FileID = await SharedFunctions.check_file_belongs(request_body["FileID"], UserID)
-                if FileID == request_body["FileID"]:
-                    basic_query = "UPDATE Files SET {0} = :value WHERE FileID = " + str(FileID)
-                    for modification in request_body["Modifications"]:
-                        if modification in ["FileDescription", "FileNSFW", "FilePrivate", "FileExcludeSearch"]:
-                            modification_query = basic_query.format(modification)
-                            await iamagesdb.execute(modification_query, {
-                                "value": request_body["Modifications"][modification]
-                            })
-                        elif modification == "DeleteFile":
-                            await SharedFunctions.delete_file(FileID)
-                        response_body["Modifications"].append(modification)
-                    response_body["FileID"] = FileID
-                    return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=404)
-            else:
-                return starlette.responses.Response(status_code=401)
-        else:
-            return starlette.responses.Response(status_code=400)
+
+        response_body["FileID"] = FileID
+
+        for modification in request_body["Modifications"]:
+            if modification in ["FileDescription", "FileNSFW", "FilePrivate", "FileExcludeSearch"]:
+                modification_query = basic_query.format(modification)
+                await iamagesdb.execute(modification_query, {
+                    "value": request_body["Modifications"][modification]
+                })
+            elif modification == "DeleteFile":
+                await SharedFunctions.delete_file(FileID)
+            response_body["Modifications"].append(modification)
+
+        return starlette.responses.JSONResponse(response_body)
 
 
 class Info(starlette.endpoints.HTTPEndpoint):
     async def get(self, request):
+        FileID = int(request.path_params["FileID"])
+        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink, FileExcludeSearch FROM Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
+        FilePrivate = bool(FileInformation[2])
+        
+        if not FileInformation:
+            return starlette.responses.Response(status_code=404)
+        
+        if not FilePrivate:
+            return await self.send_info(FileID, FilePrivate, FileInformation)
+
+        UserID = await SharedFunctions.process_auth_header(request.headers)
+        if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
+            return starlette.responses.Response(status_code=401)
+        
+        return await self.send_info(FileID, FilePrivate, FileInformation)
+
+    async def send_info(self, FileID, FilePrivate, FileInformation):
         response_body = {
             "FileID": None,
             "FileDescription": None,
@@ -384,41 +427,91 @@ class Info(starlette.endpoints.HTTPEndpoint):
             "FileCreatedDate": None,
             "FileExcludeSearch": None
         }
-        async def set_response(FileInformation):
-            response_body["FileID"] = int(request.path_params["FileID"])
-            response_body["FileDescription"] = FileInformation[0]
-            response_body["FileNSFW"] = bool(FileInformation[1])
-            response_body["FilePrivate"] = FilePrivate
+        response_body["FileID"] = FileID
+        response_body["FileDescription"] = FileInformation[0]
+        response_body["FileNSFW"] = bool(FileInformation[1])
+        response_body["FilePrivate"] = FilePrivate
+
+        if FileInformation[7]:
+            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
+                "FileID": FileInformation[7]
+            })
+            response_body["FileMime"] = linked_FileInformation[0]
+            response_body["FileWidth"] = linked_FileInformation[1]
+            response_body["FileHeight"] = linked_FileInformation[2]
+        else:
+            response_body["FileMime"] = FileInformation[3]
+            response_body["FileWidth"] = FileInformation[4]
+            response_body["FileHeight"] = FileInformation[5]
+
+        response_body["FileCreatedDate"] = FileInformation[6]
+        response_body["FileExcludeSearch"] = bool(FileInformation[8])
+
+        return starlette.responses.JSONResponse(response_body)
+
+
+class Infos(starlette.endpoints.HTTPEndpoint):
+    async def post(self, request):
+        request_body = await request.json()
+        response_body = []
+
+        processed_FileIDs = []
+
+        for FileID in request_body["FileIDs"]:
+            if FileID in processed_FileIDs:
+                continue
+
+            if type(FileID) != int:
+                continue
+
+            FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink, FileExcludeSearch FROM Files WHERE FileID = :FileID", {
+                "FileID": FileID
+            })
+            FilePrivate = bool(FileInformation[2])
+
+            if FilePrivate:
+                if "UserName" not in request_body or "UserPassword" not in request_body:
+                    continue
+
+                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+                if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
+                    continue
+
+            response_body_item = {
+                "FileID": None,
+                "FileDescription": None,
+                "FileNSFW": None,
+                "FilePrivate": None,
+                "FileMime": None,
+                "FileWidth": None,
+                "FileHeight": None,
+                "FileCreatedDate": None,
+                "FileExcludeSearch": None
+            }
+
+            response_body_item["FileID"] = FileID
+            response_body_item["FileDescription"] = FileInformation[0]
+            response_body_item["FileNSFW"] = bool(FileInformation[1])
+            response_body_item["FilePrivate"] = FilePrivate
+
             if FileInformation[7]:
                 linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
                     "FileID": FileInformation[7]
                 })
-                response_body["FileMime"] = linked_FileInformation[0]
-                response_body["FileWidth"] = linked_FileInformation[1]
-                response_body["FileHeight"] = linked_FileInformation[2]
+                response_body_item["FileMime"] = linked_FileInformation[0]
+                response_body_item["FileWidth"] = linked_FileInformation[1]
+                response_body_item["FileHeight"] = linked_FileInformation[2]
             else:
-                response_body["FileMime"] = FileInformation[3]
-                response_body["FileWidth"] = FileInformation[4]
-                response_body["FileHeight"] = FileInformation[5]
-            response_body["FileCreatedDate"] = FileInformation[6]
-            response_body["FileExcludeSearch"] = bool(FileInformation[8])
+                response_body_item["FileMime"] = FileInformation[3]
+                response_body_item["FileWidth"] = FileInformation[4]
+                response_body_item["FileHeight"] = FileInformation[5]
 
-        FileID = int(request.path_params["FileID"])
-        FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileCreatedDate, FileLink, FileExcludeSearch FROM Files WHERE FileID = :FileID", {
-            "FileID": FileID
-        })
-        FilePrivate =  bool(FileInformation[2])
-        if FilePrivate:
-            UserID = await SharedFunctions.process_auth_header(request.headers)
-            if UserID:
-                if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                    await set_response(FileInformation)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return starlette.responses.Response(status_code=403)
-        else:
-            await set_response(FileInformation)
+            response_body_item["FileCreatedDate"] = FileInformation[6]
+            response_body_item["FileExcludeSearch"] = bool(FileInformation[8])
+
+            response_body.append(response_body_item)
+            processed_FileIDs.append(FileID)
+        
         return starlette.responses.JSONResponse(response_body)
 
 
@@ -433,34 +526,40 @@ class Embed(starlette.endpoints.HTTPEndpoint):
             "FileWidth": 0,
             "FileHeight": 0
         }
+
         FileID = int(request.path_params["FileID"])
         FileInformation = await iamagesdb.fetch_one("SELECT FileDescription, FilePrivate, FileMime, FileWidth, FileHeight, FileLink From Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
-        if FileInformation:
-            if bool(FileInformation[1]):
-                response_template["title"] = "Private file from Iamages"
-                response_template["FileDescription"] = "The owner of this file has enabled private mode. No peeking allowed! 👀"
-            else:
-                response_template["title"] = FileInformation[0] + " - from Iamages"
-                response_template["FileDescription"] = FileInformation[0]
-                response_template["FileID"] = FileID
-                if FileInformation[5]:
-                    linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
-                        "FileID": FileInformation[5]
-                    })
-                    response_template["FileMime"] = linked_FileInformation[0]
-                    response_template["FileWidth"] = linked_FileInformation[1]
-                    response_template["FileHeight"] = linked_FileInformation[2]
-                else:
-                    response_template["FileMime"] = FileInformation[2]
-                    response_template["FileWidth"] = FileInformation[3]
-                    response_template["FileHeight"] = FileInformation[4]
-            return templates.TemplateResponse("embed.html", response_template)
-        else:
+
+        response_status_code = 200
+
+        if not FileInformation:
             response_template["title"] = "File not found on Iamages"
             response_template["FileDescription"] = "The requested file couldn't be found. Ran memcheck yet? 🐿"
             return templates.TemplateResponse("embed.html", response_template, status_code=404)
+
+        if bool(FileInformation[1]):
+            response_template["title"] = "Private file from Iamages"
+            response_template["FileDescription"] = "The owner of this file has enabled private mode. No peeking allowed! 👀"
+            response_status_code = 401
+        else:
+            response_template["title"] = FileInformation[0] + " - from Iamages"
+            response_template["FileDescription"] = FileInformation[0]
+            response_template["FileID"] = FileID
+            if FileInformation[5]:
+                linked_FileInformation = await iamagesdb.fetch_one("SELECT FileMime, FileWidth, FileHeight FROM Files WHERE FileID = :FileID", {
+                    "FileID": FileInformation[5]
+                })
+                response_template["FileMime"] = linked_FileInformation[0]
+                response_template["FileWidth"] = linked_FileInformation[1]
+                response_template["FileHeight"] = linked_FileInformation[2]
+            else:
+                response_template["FileMime"] = FileInformation[2]
+                response_template["FileWidth"] = FileInformation[3]
+                response_template["FileHeight"] = FileInformation[4]
+
+        return templates.TemplateResponse("embed.html", response_template, status_code=response_status_code)
 
 
 class Img(starlette.endpoints.HTTPEndpoint):
@@ -470,39 +569,38 @@ class Img(starlette.endpoints.HTTPEndpoint):
             "FileID": FileID
         })
 
-        if FileInformation:
-            if bool(FileInformation[1]):
-                UserID = await SharedFunctions.process_auth_header(request.headers)
-                if UserID:
-                    if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                        return await self.send_img(FileID, FileInformation)
-                    else:
-                        return starlette.responses.Response(status_code=401)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return await self.send_img(FileID, FileInformation)
-        else:
+        if not FileInformation:
             return starlette.responses.Response(status_code=404)
 
+        if not bool(FileInformation[1]):
+            return await self.send_img(FileID, FileInformation)
+
+        UserID = await SharedFunctions.process_auth_header(request.headers)
+        if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
+            return starlette.responses.Response(status_code=401)
+
+        return await self.send_img(FileID, FileInformation)
+
+
     async def send_img(self, FileID, FileInformation):
+        FileID = str(FileID)
+        FileName = FileInformation[0]
         FileMime = FileInformation[2]
+
         if FileInformation[3]:
             linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
                 "FileID": FileInformation[3]
             })
+            FileID = str(FileInformation[3])
+            FileName = linked_FileInformation[0]
             FileMime = linked_FileInformation[1]
-            file_path = os.path.join(FILES_PATH, str(FileInformation[3]), linked_FileInformation[0])
-        else:
-            file_path = os.path.join(FILES_PATH, str(FileID), FileInformation[0])
-        
-        if os.path.isfile(file_path):
-            with open(file_path, "rb") as file:
-                return starlette.responses.Response(file.read(), headers={
-                    "Content-Type": FileMime
-                })
-        else:
+
+        file_path = os.path.join(FILES_PATH, FileID, FileName)
+
+        if not os.path.isfile(file_path):
             return starlette.responses.Response(status_code=404)
+
+        return starlette.responses.FileResponse(file_path, media_type=FileMime)
 
 
 class Thumb(starlette.endpoints.HTTPEndpoint):
@@ -511,191 +609,218 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
         FileInformation = await iamagesdb.fetch_one("SELECT FileName, FilePrivate, FileMime, FileLink FROM Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
-                
-        if FileInformation:
-            if bool(FileInformation[1]):
-                UserID = await SharedFunctions.process_auth_header(request.headers)
-                if UserID:
-                    if FileID == await SharedFunctions.check_file_belongs(FileID, UserID):
-                        return await self.send_thumb(FileID, FileInformation, request)
-                    else:
-                        return starlette.responses.Response(status_code=401)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return await self.send_thumb(FileID, FileInformation, request)
-        else:
+
+        if not FileInformation:
             return starlette.responses.Response(status_code=404)
 
+        if not bool(FileInformation[1]):
+            return await self.send_thumb(FileID, FileInformation, request)
+
+        UserID = await SharedFunctions.process_auth_header(request.headers)
+        if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
+            return starlette.responses.Response(status_code=401)
+
+        return await self.send_thumb(FileID, FileInformation, request)
+
     async def send_thumb(self, FileID, FileInformation, request):
+        FileID = str(FileID)
+        FileName = FileInformation[0]
         FileMime = FileInformation[2]
-        FileName = str(FileInformation[0])
-        FileID = FileID
+
         if FileInformation[3]:
-            FileID = FileInformation[3]
             linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
                 "FileID": FileID
             })
+            FileID = str(FileInformation[3])
             FileName = linked_FileInformation[0]
             FileMime = linked_FileInformation[1]
-            thumb_path = os.path.join(THUMBS_PATH, str(FileInformation[3]), FileName)
-        else:
-            FileName = FileInformation[0]
-            thumb_path = os.path.join(THUMBS_PATH, str(FileID), FileName)
-        if os.path.isfile(thumb_path):
-            with open(thumb_path, "rb") as thumb:
-                return starlette.responses.Response(thumb.read(), headers={
-                    "Content-Type": FileMime
-                })
-        else:
+
+        thumb_path = os.path.join(THUMBS_PATH, FileID, FileName)
+
+        if not os.path.isfile(thumb_path):
             bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
             return starlette.responses.RedirectResponse(request.url_for("img", FileID=FileID), background=bg_task)
+        
+        return starlette.responses.FileResponse(thumb_path, media_type=FileMime)
 
 
 class Search(starlette.endpoints.HTTPEndpoint):
     async def post(self, request):
         request_body = await request.json()
-        response_body = {
-            "FileIDs": [],
-            "SearchTerms": ""
-        }
 
         UserID = None
+
         if "UserName" in request_body and "UserPassword" in request_body:
             UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-        
-        if "SearchWhere" in request_body and "SearchTerms" in request_body:
-            if request_body["SearchWhere"] == "public":
 
-                FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE instr(FileDescription, :SearchTerms) > 0 AND FileExcludeSearch = 0 AND FilePrivate = 0", {
-                    "SearchTerms": request_body["SearchTerms"]
-                })
+        if "FileDescription" not in request_body or type(request_body["FileDescription"]) != str:
+            return starlette.responses.Response(status_code=400)
+
+        FileIDs = await iamagesdb.fetch_all("SELECT FileID, FilePrivate FROM Files WHERE instr(FileDescription, :FileDescription) > 0 AND FileExcludeSearch = 0", {
+            "FileDescription": request_body["FileDescription"]
+        })
+
+        response_body = {
+            "FileDescription": "",
+            "FileIDs": []
+        }
+
+        response_body["FileDescription"] = request_body["FileDescription"]
+
+        for FileID in FileIDs:
+            if not bool(FileID[1]):
+                response_body["FileIDs"].append(FileID[0])
+            else:
+                if not UserID:
+                    continue
+                if not await SharedFunctions.check_file_belongs(FileID[0], UserID):
+                    continue
+                response_body["FileIDs"].append(FileID[0])
+
+        return starlette.responses.JSONResponse(response_body)
 
 
 class User:
     class Info(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
             request_body = await request.json()
+
+            if "UserName" not in request_body or type(request_body["UserName"]) != str:
+                return starlette.responses.Response(status_code=400)
+
+            UserInformation = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserName = :UserName", {
+                "UserName": request_body["UserName"]
+            })
+
+            if not UserInformation:
+                return starlette.responses.Response(status_code=404)
+
             response_body = {
                 "UserName": None,
                 "UserInfo": {}
             }
-            if "UserName" in request_body and "UserPassword" in request_body:
-                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-                if UserID:
-                    UserInfo = await iamagesdb.fetch_one("SELECT UserBiography, UserCreatedDate FROM Users WHERE UserID = :UserID", {
-                        "UserID": UserID
-                    })
-                    if UserInfo:
-                        response_body["UserName"] = request_body["UserName"]
-                        response_body["UserInfo"]["UserBiography"] = UserInfo[0]
-                        response_body["UserInfo"]["UserCreatedDate"] = UserInfo[1]
-                        return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return starlette.responses.Response(status_code=400)
+
+            response_body["UserName"] = request_body["UserName"]
+            response_body["UserInfo"]["UserBiography"] = UserInformation[0]
+            response_body["UserInfo"]["UserCreatedDate"] = UserInformation[1]
+
+            return starlette.responses.JSONResponse(response_body)
 
 
     class Files(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
             request_body = await request.json()
+
+            if "UserName" not in request_body or "UserPassword" not in request_body or type(request_body["UserName"]) != str or type(request_body["UserPassword"]) != str:
+                return starlette.responses.Response(status_code=400)
+
+            UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+
+            if not UserID:
+                return starlette.responses.Response(status_code=401)
+
             response_body = {
                 "UserName": None,
                 "FileIDs": []
             }
-            if "UserName" in request_body and "UserPassword" in request_body:
-                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-                if UserID:
-                    response_body["UserName"] = request_body["UserName"]
-                    FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files_Users WHERE UserID = :UserID ORDER BY FileID DESC", {
-                        "UserID": UserID
-                    })
-                    for FileID in FileIDs:
-                        response_body["FileIDs"].append(FileID[0])
-                    return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return starlette.responses.Response(status_code=400)
+
+            response_body["UserName"] = request_body["UserName"]
+            FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files_Users WHERE UserID = :UserID ORDER BY FileID DESC", {
+                "UserID": UserID
+            })
+            for FileID in FileIDs:
+                response_body["FileIDs"].append(FileID[0])
+            return starlette.responses.JSONResponse(response_body)
 
 
     class Modify(starlette.endpoints.HTTPEndpoint):
         async def patch(self, request):
             request_body = await request.json()
+
+            if "UserName" not in request_body or "UserPassword" not in request_body or "FileID" not in request_body or "Modifications" not in request_body or type(request_body["UserName"]) != str or type(request_body["UserPassword"]) != str or type(request_body["FileID"]) != int or type(request_body["Modifications"]) != dict:
+                return starlette.responses.Response(status_code=400)
+
+            UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
+
+            if not UserID:
+                return starlette.responses.Response(status_code=401)
+
+            basic_query = "UPDATE Users SET {0} = :value WHERE UserID = " + str(UserID)
+
             response_body = {
                 "UserName": None,
                 "Modifications": []
             }
-            if "UserName" in request_body and "UserPassword" in request_body and "Modifications" in request_body:
-                UserID = await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"])
-                if UserID:
-                    basic_query = "UPDATE Users SET {0} = :value WHERE UserID = " + str(UserID)
-                    for modification in request_body["Modifications"]:
-                        if modification in ["UserBiography", "UserName"]:
-                            modification_query = basic_query.format(modification)
-                            await iamagesdb.execute(modification_query, {
-                                "value": request_body["Modifications"][modification]
-                            })
-                        elif modification == "UserPassword":
-                            basic_query = basic_query.format(modification)
-                            await iamagesdb.execute(basic_query, {
-                                "value": bcrypt.hashpw(bytes(request_body["Modifications"][modification], 'utf-8'), bcrypt.gensalt())
-                            })
-                        elif modification == "DeleteUser":
-                            await iamagesdb.execute("DELETE FROM Users WHERE UserID = :UserID", {
-                                "UserID": UserID
-                            })
-                            FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files_Users WHERE UserID = :UserID", {
-                                "UserID": UserID
-                            })
-                            for FileID in FileIDs:
-                                await SharedFunctions.delete_file(FileID[0])
-                        response_body["Modifications"].append(modification)
-                    response_body["UserName"] = request_body["UserName"]
-                    return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return starlette.responses.Response(status_code=400)
+
+            response_body["UserName"] = request_body["UserName"]
+
+            for modification in request_body["Modifications"]:
+                if modification in ["UserBiography"]:
+                    modification_query = basic_query.format(modification)
+                    await iamagesdb.execute(modification_query, {
+                        "value": request_body["Modifications"][modification]
+                    })
+                elif modification == "UserPassword":
+                    basic_query = basic_query.format(modification)
+                    await iamagesdb.execute(basic_query, {
+                        "value": bcrypt.hashpw(bytes(request_body["Modifications"][modification], 'utf-8'), bcrypt.gensalt())
+                    })
+                elif modification == "DeleteUser":
+                    await iamagesdb.execute("DELETE FROM Users WHERE UserID = :UserID", {
+                        "UserID": UserID
+                    })
+                    FileIDs = await iamagesdb.fetch_all("SELECT FileID FROM Files_Users WHERE UserID = :UserID", {
+                        "UserID": UserID
+                    })
+                    for FileID in FileIDs:
+                        await SharedFunctions.delete_file(FileID[0])
+                response_body["Modifications"].append(modification)
+
+            return starlette.responses.JSONResponse(response_body)
 
 
     class New(starlette.endpoints.HTTPEndpoint):
         async def put(self, request):
             request_body = await request.json()
+
+            if "UserName" not in request_body or "UserPassword" not in request_body or type(request_body["UserName"]) != str or type(request_body["UserPassword"]) != str:
+                return starlette.responses.Response(status_code=400)
+
+            if await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"]):
+                return starlette.responses.Response(status_code=403)
+
+            await iamagesdb.execute("INSERT INTO Users (UserName, UserPassword, UserCreatedDate) VALUES (:UserName, :UserPassword, datetime('now'))", {
+                "UserName": request_body["UserName"],
+                "UserPassword": bcrypt.hashpw(bytes(request_body["UserPassword"], 'utf-8'), bcrypt.gensalt())
+            })
+
             response_body = {
                 "UserName": None
             }
-            if "UserName" in request_body and "UserPassword" in request_body:
-                if await iamagesdb.fetch_one("SELECT UserID FROM Users WHERE UserName = :UserName", {
-                    "UserName": request_body["UserName"]
-                }):
-                    return starlette.responses.Response(status_code=403)
-                else:
-                    await iamagesdb.execute("INSERT INTO Users (UserName, UserPassword, UserCreatedDate) VALUES (:UserName, :UserPassword, datetime('now'))", {
-                        "UserName": request_body["UserName"],
-                        "UserPassword": bcrypt.hashpw(bytes(request_body["UserPassword"], 'utf-8'), bcrypt.gensalt())
-                    })
-                    response_body["UserName"] = request_body["UserName"]
-                    return starlette.responses.JSONResponse(response_body)
-            else:
-                return starlette.responses.Response(status_code=400)
+
+            response_body["UserName"] = request_body["UserName"]
+
+            return starlette.responses.JSONResponse(response_body)
     
 
     class Check(starlette.endpoints.HTTPEndpoint):
         async def post(self, request):
             request_body = await request.json()
+
+            if "UserName" not in request_body or "UserPassword" not in request_body or type(request_body["UserName"]) != str or type(request_body["UserPassword"]) != str:
+                return starlette.responses.Response(status_code=400)
+
+            if not await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"]):
+                return starlette.responses.Response(status_code=401)
+
             response_body = {
                 "UserName": None
             }
-            if "UserName" in request_body and "UserPassword" in request_body:
-                if await SharedFunctions.check_user(request_body["UserName"], request_body["UserPassword"]):
-                    response_body["UserName"] = request_body["UserName"]
-                    return starlette.responses.JSONResponse(response_body)
-                else:
-                    return starlette.responses.Response(status_code=401)
-            else:
-                return starlette.responses.Response(status_code=400)
+
+            response_body["UserName"] = request_body["UserName"]
+
+            return starlette.responses.JSONResponse(response_body)                
+                
 
 app = starlette.applications.Starlette(routes=[
     starlette.routing.Mount("/iamages/api", routes=[
@@ -710,9 +835,11 @@ app = starlette.applications.Starlette(routes=[
         starlette.routing.Route("/upload", Upload),
         starlette.routing.Route("/modify", Modify),
         starlette.routing.Route("/info/{FileID:int}", Info, name="info"),
+        starlette.routing.Route("/infos", Infos),
         starlette.routing.Route("/embed/{FileID:int}", Embed, name="embed"),
         starlette.routing.Route("/img/{FileID:int}", Img, name="img"),
         starlette.routing.Route("/thumb/{FileID:int}", Thumb, name="thumb"),
+        starlette.routing.Route("/search", Search),
         starlette.routing.Mount("/user", routes=[
             starlette.routing.Route("/info", User.Info),
             starlette.routing.Route("/files", User.Files),

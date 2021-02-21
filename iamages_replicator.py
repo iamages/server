@@ -28,7 +28,7 @@ if os.path.isfile(archives_filepath):
     archives = json.load(open(archives_filepath, "r"))
 
 CMD_PARSER = argparse.ArgumentParser(
-    description='Back up or restore a replicated Iamages database.'
+    description='Back up or restore a replicated Iamages archive.'
 )
 
 CMD_PARSER.add_argument(

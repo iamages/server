@@ -13,6 +13,7 @@ pillow = "*"
 gunicorn = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 filetype = "*"
+setproctitle = "*"
 
 [dev-packages]
 
