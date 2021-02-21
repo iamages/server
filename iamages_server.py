@@ -629,7 +629,7 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
 
         if FileInformation[3]:
             linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
-                "FileID": FileID
+                "FileID": FileInformation[3]
             })
             FileID = str(FileInformation[3])
             FileName = linked_FileInformation[0]
