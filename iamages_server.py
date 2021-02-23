@@ -221,7 +221,7 @@ class Random(starlette.endpoints.HTTPEndpoint):
         FileID = 0
 
         while FileID == 0:
-            FileID = random.randint(1, total_files)
+            FileID = random.SystemRandom().randint(1, total_files)
             test_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0 AND FileExcludeSearch = 0", {
                 "FileID": FileID
             })
