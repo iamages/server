@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "fc5c76e231c9bce993e650cff56590c7b5b0e13221c4f37c860459934c7f54ae"
+            "sha256": "f8cda87bb5b40e6f07002a3ace965f03061fce8180e3800337c6ba89887939bf"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -30,6 +30,14 @@
                 "sha256:f0e6acc24bc4864149267ac82fb46dfb3be4455f99fe21df82609cc6e6baee51"
             ],
             "version": "==0.17.0"
+        },
+        "asynctempfile": {
+            "hashes": [
+                "sha256:4a647c747357e8827397baadbdfe87f3095d30923fa789e797111eb02160884a",
+                "sha256:cec59bdb71c850e3de9bb4415f88998165c364709696240eea9ec5204a7439af"
+            ],
+            "index": "pypi",
+            "version": "==0.5.0"
         },
         "bcrypt": {
             "hashes": [

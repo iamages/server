@@ -9,12 +9,13 @@ import bcrypt
 import base64
 import hashlib
 import filetype
-import string
 import mimetypes
 import PIL.Image
 import aiofiles
 import aiofiles.os
 import shutil
+import uuid
+import asynctempfile
 import starlette.applications
 import starlette.endpoints
 import starlette.routing
@@ -72,7 +73,7 @@ class SharedFunctions:
             new_thumb_directory = os.path.join(THUMBS_PATH, str(file_links[0][0]))
             if not os.path.isdir(new_thumb_directory):
                 await aiofiles.os.mkdir(new_thumb_directory)
-            new_file_name = '' + (random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + mimetypes.guess_extension(ex_file_info[1])
+            new_file_name = uuid.uuid4().hex + mimetypes.guess_extension(ex_file_info[1])
             async with aiofiles.open(os.path.join(ex_file_directory, ex_file_info[0]), "rb") as ex_file:
                 async with aiofiles.open(os.path.join(new_file_directory, new_file_name), "wb") as new_file:
                     await new_file.write(await ex_file.read())
@@ -303,38 +304,35 @@ class Upload(starlette.endpoints.HTTPEndpoint):
             response_body["FileID"] = FileID
             return starlette.responses.JSONResponse(response_body)
         else:
-            file_folder_path = os.path.join(FILES_PATH, str(FileID))
-            if not os.path.isdir(file_folder_path):
-                await aiofiles.os.mkdir(file_folder_path)
+            async with asynctempfile.NamedTemporaryFile() as uploaded_file:
+                await uploaded_file.write(FileData)
 
-            file_path = os.path.join(file_folder_path, "unprocessed.image")
-            async with aiofiles.open(file_path, "wb") as file:
-                await file.write(FileData)
+                file_type = filetype.guess(uploaded_file.name)
+                if file_type.mime not in server_config["files"]["accept_filemimes"]:
+                    await SharedFunctions.delete_file(FileID)
+                    raise starlette.exceptions.HTTPException(415)
 
-            file_type = filetype.guess(file_path)
-            if file_type.mime not in server_config["files"]["accept_filemimes"]:
-                await SharedFunctions.delete_file(FileID)
-                raise starlette.exceptions.HTTPException(415)
+                file_folder_path = os.path.join(FILES_PATH, str(FileID))
+                if not os.path.isdir(file_folder_path):
+                    await aiofiles.os.mkdir(file_folder_path)
 
-            random_file_name = '' + (random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(6)) + "." + file_type.extension
+                random_file_name = uuid.uuid4().hex + "." + file_type.extension
 
-            new_file_path = os.path.join(file_folder_path, random_file_name)
+                file_path = os.path.join(file_folder_path, random_file_name)
 
-            with PIL.Image.open(file_path) as img:
-                if file_type.mime == "image/gif":
-                    img.save(new_file_path, save_all=True)
-                else:
-                    img.save(new_file_path)
-                await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
-                    "FileName": random_file_name,
-                    "FileWidth": img.size[0],
-                    "FileHeight": img.size[1],
-                    "FileMime": file_type.mime,
-                    "FileHash": FileHash,
-                    "FileID": FileID
-                })
-
-            await aiofiles.os.remove(file_path)
+                with PIL.Image.open(uploaded_file.name) as img:
+                    if file_type.mime == "image/gif":
+                        img.save(file_path, save_all=True)
+                    else:
+                        img.save(file_path)
+                    await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
+                        "FileName": random_file_name,
+                        "FileWidth": img.size[0],
+                        "FileHeight": img.size[1],
+                        "FileMime": file_type.mime,
+                        "FileHash": FileHash,
+                        "FileID": FileID
+                    })
 
             if UserID:
                 await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
