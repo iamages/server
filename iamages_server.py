@@ -27,6 +27,7 @@ import starlette.middleware.cors
 import starlette.middleware.gzip
 import starlette.responses
 import starlette.exceptions
+import starlette.concurrency
 
 IAMAGES_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -99,9 +100,9 @@ class SharedFunctions:
                     "FileID": file_links[file][0]
                 })
         if os.path.isdir(ex_file_directory):
-            shutil.rmtree(ex_file_directory)
+            await starlette.concurrency.run_in_threadpool(lambda: shutil.rmtree(ex_file_directory))
         if os.path.isdir(ex_thumb_directory):
-            shutil.rmtree(ex_thumb_directory)
+            await starlette.concurrency.run_in_threadpool(lambda: shutil.rmtree(ex_thumb_directory))
         await iamagesdb.execute("DELETE FROM Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
@@ -119,7 +120,7 @@ class SharedFunctions:
             return None
 
         for user in users:
-            if bcrypt.checkpw(bytes(UserPassword, "utf-8"), user[1]):
+            if await starlette.concurrency.run_in_threadpool(lambda: bcrypt.checkpw(bytes(UserPassword, "utf-8"), user[1])):
                 return user[0]
         return None
 
@@ -142,7 +143,7 @@ class SharedFunctions:
         if scheme.lower() != "basic":
             return None
         try:
-            credentials_decoded = base64.b64decode(credentials).decode("utf-8")
+            credentials_decoded = await starlette.concurrency.run_in_threadpool(lambda: base64.b64decode(credentials).decode("utf-8"))
         except:
             return None
 
@@ -255,8 +256,8 @@ class Upload(starlette.endpoints.HTTPEndpoint):
         })
 
         FileID = (await iamagesdb.fetch_one("SELECT FileID FROM Files ORDER BY FileID DESC"))[0]
-        FileData = base64.b64decode(request_body["FileData"])
-        FileHash = hashlib.blake2b(FileData).hexdigest()
+        FileData = await starlette.concurrency.run_in_threadpool(lambda: base64.b64decode(request_body["FileData"]))
+        FileHash = await starlette.concurrency.run_in_threadpool(lambda: hashlib.blake2b(FileData).hexdigest())
 
         duplicate_exists = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FileHash = :FileHash AND FilePrivate = 0", {
             "FileHash": FileHash
@@ -304,6 +305,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
             response_body["FileID"] = FileID
             return starlette.responses.JSONResponse(response_body)
         else:
+            file_dimensions = (None, None)
             async with asynctempfile.NamedTemporaryFile() as uploaded_file:
                 await uploaded_file.write(FileData)
 
@@ -320,19 +322,16 @@ class Upload(starlette.endpoints.HTTPEndpoint):
 
                 file_path = os.path.join(file_folder_path, random_file_name)
 
-                with PIL.Image.open(uploaded_file.name) as img:
-                    if file_type.mime == "image/gif":
-                        img.save(file_path, save_all=True)
-                    else:
-                        img.save(file_path)
-                    await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
-                        "FileName": random_file_name,
-                        "FileWidth": img.size[0],
-                        "FileHeight": img.size[1],
-                        "FileMime": file_type.mime,
-                        "FileHash": FileHash,
-                        "FileID": FileID
-                    })
+                file_dimensions = await starlette.concurrency.run_in_threadpool(self.save_img, tempfile_path=uploaded_file.name, file_path=file_path, FileMime=file_type.mime)
+
+            await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileWidth = :FileWidth, FileHeight = :FileHeight, FileMime = :FileMime, FileHash = :FileHash WHERE FileID = :FileID", {
+                "FileName": random_file_name,
+                "FileWidth": file_dimensions[0],
+                "FileHeight": file_dimensions[1],
+                "FileMime": file_type.mime,
+                "FileHash": FileHash,
+                "FileID": FileID
+            })
 
             if UserID:
                 await iamagesdb.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (:FileID, :UserID)", {
@@ -364,6 +363,14 @@ class Upload(starlette.endpoints.HTTPEndpoint):
             response_body["FileID"] = FileID
             bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=random_file_name, FileMime=file_type.mime)
             return starlette.responses.JSONResponse(response_body, background=bg_task)
+
+    def save_img(self, tempfile_path, file_path, FileMime):
+        with PIL.Image.open(tempfile_path) as img:
+            if FileMime == "image/gif":
+                img.save(file_path, save_all=True)
+            else:
+                img.save(file_path)
+            return img.size
 
 
 class Modify(starlette.endpoints.HTTPEndpoint):
@@ -778,7 +785,7 @@ class User:
                 elif modification == "UserPassword":
                     basic_query = basic_query.format(modification)
                     await iamagesdb.execute(basic_query, {
-                        "value": bcrypt.hashpw(bytes(request_body["Modifications"][modification], 'utf-8'), bcrypt.gensalt())
+                        "value": await starlette.concurrency.run_in_threadpool(lambda: bcrypt.hashpw(bytes(request_body["Modifications"][modification], 'utf-8'), bcrypt.gensalt()))
                     })
                 elif modification == "DeleteUser":
                     await iamagesdb.execute("DELETE FROM Users WHERE UserID = :UserID", {
@@ -806,7 +813,7 @@ class User:
 
             await iamagesdb.execute("INSERT INTO Users (UserName, UserPassword, UserCreatedDate) VALUES (:UserName, :UserPassword, datetime('now'))", {
                 "UserName": request_body["UserName"],
-                "UserPassword": bcrypt.hashpw(bytes(request_body["UserPassword"], 'utf-8'), bcrypt.gensalt())
+                "UserPassword": await starlette.concurrency.run_in_threadpool(lambda: bcrypt.hashpw(bytes(request_body["UserPassword"], 'utf-8'), bcrypt.gensalt()))
             })
 
             response_body = {
