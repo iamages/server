@@ -668,7 +668,7 @@ class Img(starlette.endpoints.HTTPEndpoint):
 
         if not bool(FileInformation[1]):
             if server_config["files"]["dedicated_delivery"]["status"]:
-                return await delivery_cache.return_cached("img", FileID, FileInformation)
+                return await delivery_cache.return_cached("img", FileID, FileInformation, request)
             return await self.send_img(FileID, FileInformation)
 
         UserID = await SharedFunctions.process_auth_header(request.headers)
@@ -676,7 +676,7 @@ class Img(starlette.endpoints.HTTPEndpoint):
             raise starlette.exceptions.HTTPException(401)
 
         if server_config["files"]["dedicated_delivery"]["status"]:
-            return await delivery_cache.return_cached("img", FileID, FileInformation)   
+            return await delivery_cache.return_cached("img", FileID, FileInformation, request)   
         return await self.send_img(FileID, FileInformation)
 
 
