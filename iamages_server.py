@@ -58,38 +58,36 @@ templates = starlette.templating.Jinja2Templates(directory=os.path.join(IAMAGES_
 class SharedFunctions:
     @staticmethod
     async def delete_file(FileID: int):
-        ex_file_directory = os.path.join(FILES_PATH, str(FileID))
-        ex_thumb_directory = os.path.join(THUMBS_PATH, str(FileID))
+        ex_file_information = await iamagesdb.fetch_one("SELECT FileName, FileMime, FileWidth, FileHeight, FileHash FROM Files WHERE FileID = :FileID", {
+            "FileID": FileID
+        })
+        ex_file_path = os.path.join(FILES_PATH, ex_file_information[0])
+        ex_thumb_path = os.path.join(THUMBS_PATH, ex_file_information[0])
         file_links = await iamagesdb.fetch_all("SELECT FileID FROM Files WHERE FileLink = :FileID", {
             "FileID": FileID
         })
         if file_links:
-            ex_file_info = await iamagesdb.fetch_one("SELECT FileName, FileMime, FileWidth, FileHeight, FileHash FROM Files WHERE FileID = :FileID", {
-                "FileID": FileID
-            })
-            new_file_directory = os.path.join(FILES_PATH, str(file_links[0][0]))
-            if not os.path.isdir(new_file_directory):
-                await aiofiles.os.mkdir(new_file_directory)
-            new_thumb_directory = os.path.join(THUMBS_PATH, str(file_links[0][0]))
-            if not os.path.isdir(new_thumb_directory):
-                await aiofiles.os.mkdir(new_thumb_directory)
-            new_file_name = (await SharedFunctions.async_uuid_4_hex()) + mimetypes.guess_extension(ex_file_info[1])
-            async with aiofiles.open(os.path.join(ex_file_directory, ex_file_info[0]), "rb") as ex_file:
-                async with aiofiles.open(os.path.join(new_file_directory, new_file_name), "wb") as new_file:
-                    await new_file.write(await ex_file.read())
-            ex_thumb_name = os.path.join(ex_thumb_directory, ex_file_info[0])
-            if os.path.isfile(ex_thumb_name):
-                async with aiofiles.open(ex_thumb_name, "rb") as ex_thumb:
-                    async with aiofiles.open(os.path.join(new_thumb_directory, new_file_name), "wb") as new_thumb:
-                        await new_thumb.write(await ex_thumb.read())
+            new_file_name = (await SharedFunctions.async_uuid_4_hex()) + mimetypes.guess_extension(ex_file_information[1])
+            new_file_path = os.path.join(FILES_PATH, new_file_name)
+            new_thumb_path = os.path.join(THUMBS_PATH, new_file_name)
+            while os.path.isfile(new_file_path) or os.path.isfile(new_thumb_path):
+                new_file_name = (await SharedFunctions.async_uuid_4_hex()) + mimetypes.guess_extension(ex_file_information[1])
+                new_file_path = os.path.join(FILES_PATH, new_file_name)
+                new_thumb_path = os.path.join(THUMBS_PATH, new_file_name)
+
+            await aiofiles.os.rename(ex_file_path, new_file_path)
+
+            if os.path.isfile(ex_thumb_path):
+                 await aiofiles.os.rename(ex_thumb_path, new_thumb_path)
             else:
-                await SharedFunctions.create_thumb(file_links[0][0], new_file_name, ex_file_info[1])
+                await SharedFunctions.create_thumb(new_file_name, ex_file_information[1])
+    
             await iamagesdb.execute("UPDATE Files SET FileName = :FileName, FileMime = :FileMime, FileWidth = :FileWidth, FileHeight = :FileHeight, FileHash = :FileHash, FileLink = :FileLink WHERE FileID = :FileID", {
                 "FileName": new_file_name,
-                "FileMime": ex_file_info[1],
-                "FileWidth": ex_file_info[2],
-                "FileHeight": ex_file_info[3],
-                "FileHash": ex_file_info[4],
+                "FileMime": ex_file_information[1],
+                "FileWidth": ex_file_information[2],
+                "FileHeight": ex_file_information[3],
+                "FileHash": ex_file_information[4],
                 "FileLink": None,
                 "FileID": file_links[0][0] 
             })
@@ -98,10 +96,12 @@ class SharedFunctions:
                     "FileLink": file_links[0][0],
                     "FileID": file_links[file][0]
                 })
-        if os.path.isdir(ex_file_directory):
-            await starlette.concurrency.run_in_threadpool(lambda: shutil.rmtree(ex_file_directory))
-        if os.path.isdir(ex_thumb_directory):
-            await starlette.concurrency.run_in_threadpool(lambda: shutil.rmtree(ex_thumb_directory))
+        else:
+            await aiofiles.os.remove(ex_file_path)
+
+            if os.path.isfile(ex_thumb_path):
+                await aiofiles.os.remove(ex_thumb_path)
+
         await iamagesdb.execute("DELETE FROM Files WHERE FileID = :FileID", {
             "FileID": FileID
         })
@@ -154,12 +154,9 @@ class SharedFunctions:
             return None
 
     @staticmethod
-    async def create_thumb(FileID: int, FileName: str, FileMime: str) -> None:
-        thumb_folder_path = os.path.join(THUMBS_PATH, str(FileID))
-        if not os.path.isdir(thumb_folder_path):
-            await aiofiles.os.mkdir(thumb_folder_path)
-        new_thumb_path = os.path.join(thumb_folder_path, FileName)
-        with PIL.Image.open(os.path.join(FILES_PATH, str(FileID), FileName)) as img:
+    async def create_thumb(FileName: str, FileMime: str) -> None:
+        new_thumb_path = os.path.join(THUMBS_PATH, FileName)
+        with PIL.Image.open(os.path.join(FILES_PATH, FileName)) as img:
             img.thumbnail((600, 600), PIL.Image.LANCZOS)
             if FileMime == "image/gif":
                 img.save(new_thumb_path, save_all=True)
@@ -226,7 +223,7 @@ class Random(starlette.endpoints.HTTPEndpoint):
         FileID = 0
 
         while FileID == 0:
-            FileID = random.SystemRandom().randint(1, total_files)
+            FileID = await starlette.concurrency.run_in_threadpool(lambda: random.SystemRandom().randint(1, total_files)) 
             test_FileID = await iamagesdb.fetch_one("SELECT FileID From Files WHERE FileID = :FileID AND FilePrivate = 0 AND FileExcludeSearch = 0", {
                 "FileID": FileID
             })
@@ -317,13 +314,11 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                     await SharedFunctions.delete_file(FileID)
                     raise starlette.exceptions.HTTPException(415)
 
-                file_folder_path = os.path.join(FILES_PATH, str(FileID))
-                if not os.path.isdir(file_folder_path):
-                    await aiofiles.os.mkdir(file_folder_path)
-
                 random_file_name = (await SharedFunctions.async_uuid_4_hex()) + "." + file_type.extension
-
-                file_path = os.path.join(file_folder_path, random_file_name)
+                file_path = os.path.join(FILES_PATH, random_file_name)
+                while os.path.isfile(file_path):
+                    random_file_name = (await SharedFunctions.async_uuid_4_hex()) + "." + file_type.extension
+                    file_path = os.path.join(FILES_PATH, random_file_name)
 
                 file_dimensions = await starlette.concurrency.run_in_threadpool(self.save_img, tempfile_path=uploaded_file.name, file_path=file_path, FileMime=file_type.mime)
 
@@ -364,7 +359,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                 })
                 
             response_body["FileID"] = FileID
-            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=random_file_name, FileMime=file_type.mime)
+            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileName=random_file_name, FileMime=file_type.mime)
             return starlette.responses.JSONResponse(response_body, background=bg_task)
 
     def save_img(self, tempfile_path, file_path, FileMime):
@@ -619,7 +614,7 @@ class Img(starlette.endpoints.HTTPEndpoint):
             FileName = linked_FileInformation[0]
             FileMime = linked_FileInformation[1]
 
-        file_path = os.path.join(FILES_PATH, FileID, FileName)
+        file_path = os.path.join(FILES_PATH, FileName)
 
         if not os.path.isfile(file_path):
             raise starlette.exceptions.HTTPException(404)
@@ -647,7 +642,6 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
         return await self.send_thumb(FileID, FileInformation, request)
 
     async def send_thumb(self, FileID, FileInformation, request):
-        FileID = str(FileID)
         FileName = FileInformation[0]
         FileMime = FileInformation[2]
 
@@ -655,16 +649,15 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
             linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
                 "FileID": FileInformation[3]
             })
-            FileID = str(FileInformation[3])
             FileName = linked_FileInformation[0]
             FileMime = linked_FileInformation[1]
 
-        thumb_path = os.path.join(THUMBS_PATH, FileID, FileName)
+        thumb_path = os.path.join(THUMBS_PATH, FileName)
 
         if not os.path.isfile(thumb_path):
-            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileMime)
+            bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileName=FileName, FileMime=FileMime)
             return starlette.responses.RedirectResponse(request.url_for("img", FileID=FileID), background=bg_task)
-        
+
         return starlette.responses.FileResponse(thumb_path, media_type=FileMime)
 
 
