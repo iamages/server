@@ -11,7 +11,6 @@ import hashlib
 import filetype
 import mimetypes
 import PIL.Image
-import asyncio
 import aiofiles
 import aiofiles.os
 import shutil
@@ -74,7 +73,7 @@ class SharedFunctions:
             new_thumb_directory = os.path.join(THUMBS_PATH, str(file_links[0][0]))
             if not os.path.isdir(new_thumb_directory):
                 await aiofiles.os.mkdir(new_thumb_directory)
-            new_file_name = uuid.uuid4().hex + mimetypes.guess_extension(ex_file_info[1])
+            new_file_name = (await SharedFunctions.async_uuid_4_hex()) + mimetypes.guess_extension(ex_file_info[1])
             async with aiofiles.open(os.path.join(ex_file_directory, ex_file_info[0]), "rb") as ex_file:
                 async with aiofiles.open(os.path.join(new_file_directory, new_file_name), "wb") as new_file:
                     await new_file.write(await ex_file.read())
@@ -174,78 +173,10 @@ class SharedFunctions:
         except json.decoder.JSONDecodeError as error_str:
             raise starlette.exceptions.HTTPException(400)
 
+    @staticmethod
+    async def async_uuid_4_hex():
+        return (await starlette.concurrency.run_in_threadpool(lambda: uuid.uuid4())).hex
 
-class DedicatedDeliveryCache:
-    def __init__(self):
-        self.DEDICATED_DELIVERY_PATH = None
-        self.DEDICATED_DELIVERY_SERVER_PATH = server_config["files"]["dedicated_delivery"]["server_base_url"] + "/iamages_cache/"
-
-        self.CACHE_TYPES = ["img", "thumb"]
-
-        if server_config["files"]["dedicated_delivery"]["status"]:
-            self.DEDICATED_DELIVERY_PATH = os.path.join(server_config["files"]["dedicated_delivery"]["directory"], "iamages_cache")
-            if os.path.isdir(self.DEDICATED_DELIVERY_PATH):
-                shutil.rmtree(self.DEDICATED_DELIVERY_PATH)
-            os.makedirs(self.DEDICATED_DELIVERY_PATH)
-
-        self.cache_map = {}
-
-    async def return_cached(self, cache_type, FileID, FileInformation, request):
-        if cache_type not in self.CACHE_TYPES:
-            raise starlette.exceptions.HTTPException(503)
-
-        FileID = str(FileID)
-
-        bg_task = starlette.background.BackgroundTask(self.delete_from_cache, FileID=FileID, cache_type=cache_type)
-
-        if FileID in self.cache_map and cache_type in self.cache_map[FileID]:
-            return starlette.responses.RedirectResponse(server_config["files"]["dedicated_delivery"]["server_base_url"] + f"/iamages_cache/{self.cache_map[FileID][cache_type]}")
-
-        FileName = FileInformation[0]
-        
-        if FileInformation[3]:
-            linked_FileInformation = await iamagesdb.fetch_one("SELECT FileName, FileMime FROM Files WHERE FileID = :FileID", {
-                "FileID": FileInformation[3]
-            })
-            FileID = str(FileInformation[3])
-            FileName = linked_FileInformation[0]
-
-        if cache_type == "img":
-            file_path = os.path.join(FILES_PATH, FileID, FileName)
-        elif cache_type == "thumb":
-            file_path = os.path.join(THUMBS_PATH, FileID, FileName)
-
-        if not os.path.isfile(file_path):
-            if cache_type == "thumb":
-                bg_task = starlette.background.BackgroundTask(SharedFunctions.create_thumb, FileID=FileID, FileName=FileName, FileMime=FileInformation[2])
-                return starlette.responses.RedirectResponse(request.url_for("img", FileID=FileID), background=bg_task)
-            raise starlette.exceptions.HTTPException(404)
-
-        new_cache_uuid = None
-
-        while not new_cache_uuid or os.path.isfile(os.path.join(self.DEDICATED_DELIVERY_PATH, new_cache_uuid)):
-            new_uuid = await starlette.concurrency.run_in_threadpool(lambda: uuid.uuid4())
-            new_cache_uuid = new_uuid.hex + "." + FileName.split(".")[1]
-
-        os.symlink(file_path, os.path.join(self.DEDICATED_DELIVERY_PATH, new_cache_uuid))
-        if FileID not in self.cache_map:
-            self.cache_map[FileID] = {}
-        self.cache_map[FileID][cache_type] = new_cache_uuid
-
-        return starlette.responses.RedirectResponse(server_config["files"]["dedicated_delivery"]["server_base_url"] + f"/iamages_cache/{self.cache_map[FileID][cache_type]}", background=bg_task)
-
-    async def delete_from_cache(self, FileID, cache_type):
-        await asyncio.sleep(server_config["files"]["dedicated_delivery"]["cache_expire"] * 60)
-        FileID = str(FileID)
-        if FileID in self.cache_map:
-            if cache_type in self.cache_map[FileID]:
-                print("Unlinking expired cache: " + self.cache_map[FileID][cache_type])
-                cached_file_path = os.path.join(self.DEDICATED_DELIVERY_PATH, self.cache_map[FileID][cache_type])
-                if os.path.isfile(cached_file_path):
-                    os.unlink(cached_file_path)
-                    del self.cache_map[FileID][cache_type]
-
-delivery_cache = DedicatedDeliveryCache()
 
 class Private:
     class TOS(starlette.endpoints.HTTPEndpoint):
@@ -390,7 +321,7 @@ class Upload(starlette.endpoints.HTTPEndpoint):
                 if not os.path.isdir(file_folder_path):
                     await aiofiles.os.mkdir(file_folder_path)
 
-                random_file_name = uuid.uuid4().hex + "." + file_type.extension
+                random_file_name = (await SharedFunctions.async_uuid_4_hex()) + "." + file_type.extension
 
                 file_path = os.path.join(file_folder_path, random_file_name)
 
@@ -667,18 +598,13 @@ class Img(starlette.endpoints.HTTPEndpoint):
             raise starlette.exceptions.HTTPException(404)
 
         if not bool(FileInformation[1]):
-            if server_config["files"]["dedicated_delivery"]["status"]:
-                return await delivery_cache.return_cached("img", FileID, FileInformation, request)
             return await self.send_img(FileID, FileInformation)
 
         UserID = await SharedFunctions.process_auth_header(request.headers)
         if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
             raise starlette.exceptions.HTTPException(401)
 
-        if server_config["files"]["dedicated_delivery"]["status"]:
-            return await delivery_cache.return_cached("img", FileID, FileInformation, request)   
         return await self.send_img(FileID, FileInformation)
-
 
     async def send_img(self, FileID, FileInformation):
         FileID = str(FileID)
@@ -712,16 +638,12 @@ class Thumb(starlette.endpoints.HTTPEndpoint):
             raise starlette.exceptions.HTTPException(404)
 
         if not bool(FileInformation[1]):
-            if server_config["files"]["dedicated_delivery"]["status"]:
-                return await delivery_cache.return_cached("thumb", FileID, FileInformation, request)
             return await self.send_thumb(FileID, FileInformation, request)
 
         UserID = await SharedFunctions.process_auth_header(request.headers)
         if not UserID or FileID != await SharedFunctions.check_file_belongs(FileID, UserID):
             raise starlette.exceptions.HTTPException(401)
 
-        if server_config["files"]["dedicated_delivery"]["status"]:
-            return await delivery_cache.return_cached("thumb", FileID, FileInformation, request)
         return await self.send_thumb(FileID, FileInformation, request)
 
     async def send_thumb(self, FileID, FileInformation, request):
