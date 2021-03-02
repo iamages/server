@@ -10,6 +10,7 @@ import json
 import hashlib
 import datetime
 import tempfile
+from tqdm import tqdm
 
 print("[Iamages Storage Replicator version '{0}'. {1}]".format(__version__, __copyright__))
 
@@ -26,6 +27,8 @@ archives = {}
 archives_filepath = os.path.join(replicator_config["directory"], "archives.json")
 if os.path.isfile(archives_filepath):
     archives = json.load(open(archives_filepath, "r"))
+
+print("")
 
 CMD_PARSER = argparse.ArgumentParser(
     description='Back up or restore a replicated Iamages archive.'
@@ -59,25 +62,41 @@ if CMD_PARSED.command == "archive":
         print(f'Current storage format is not supported. (expected: {SUPPORTED_FORMAT}, got: {server_config["files"]["format"]})')
         exit(1)
     with tempfile.TemporaryDirectory() as tmp:
+        print("1/5: Copying current storage directory to temporary directory.")
         shutil.copytree(server_config["files"]["storage"]["directory"], tmp, dirs_exist_ok=True, ignore=shutil.ignore_patterns("replicated"))
 
+        print("2/5: Establish connection to Iamages database.")
         conn = sqlite3.connect(os.path.join(tmp, "iamages.db"))
         cur = conn.cursor()
+
+        print("3/5: Exporting Files table to CSV.")
         with open(os.path.join(tmp, "Files.csv"), "w") as csv_files:
             writer = csv.writer(csv_files)
             writer.writerow(["FileID", "FileName", "FileDescription", "FileNSFW", "FilePrivate", "FileMime", "FileWidth", "FileHeight", "FileHash", "FileLink", "FileCreatedDate", "FileExcludeSearch"])
-            writer.writerows(cur.execute("SELECT * FROM Files").fetchall())
+            pbar = tqdm(cur.execute("SELECT * FROM Files").fetchall())
+            for row in pbar:
+                writer.writerow(row)
+
+        print("3/5: Exporting Files_Users table to CSV.")
         with open(os.path.join(tmp, "Files_Users.csv"), "w") as csv_files_users:
             writer = csv.writer(csv_files_users)
             writer.writerow(["FileID", "UserID"])
-            writer.writerows(cur.execute("SELECT * FROM Files_Users").fetchall())
+            pbar = tqdm(cur.execute("SELECT * FROM Files_Users").fetchall())
+            for row in pbar:
+                writer.writerow(row)
+
+        print("4/5: Exporting Users table to CSV.")
         with open(os.path.join(tmp, "Users.csv"), "w") as csv_users:
             writer = csv.writer(csv_users)
             writer.writerow(["UserID", "UserName", "UserPassword", "UserBiography", "UserCreatedDate"])
-            writer.writerows(cur.execute("SELECT * FROM Users").fetchall())
-        conn.close()
+            pbar = tqdm(cur.execute("SELECT * FROM Users").fetchall())
+            for row in pbar:
+                writer.writerow(row)
 
+        conn.close()
         os.remove(os.path.join(tmp, "iamages.db"))
+
+        print("5/5: Saving as replicated archive.")
 
         current_datetime = datetime.datetime.now()
         substitute_datetimes = {
@@ -113,6 +132,7 @@ elif CMD_PARSED.command == "restore":
         print("Replicated name not provided. Exiting.")
         exit(1)
 
+    print("0/?: Looking for given archive.")
     replicated_info = archives[CMD_PARSED.archive_name]
 
     if not replicated_info["format"] == SUPPORTED_FORMAT:
@@ -121,42 +141,49 @@ elif CMD_PARSED.command == "restore":
 
     replicated_filepath = os.path.join(os.getcwd(), replicator_config["directory"], CMD_PARSED.archive_name + ".zip")
 
-    with open(replicated_filepath, "rb") as replicated_archive:
-        with open(os.path.join(replicator_config["directory"], CMD_PARSED.archive_name.split(".zip")[0] + ".blake2b.txt"), "r") as replicated_archive_hash:
-            if not hashlib.blake2b(replicated_archive.read()).hexdigest() == replicated_archive_hash.read():
-                print("Replicated archive hash doesn't match saved hash in file. Exiting.")
-                exit(1)
+    if replicated_info["has_hash"]:
+        print("0/?: Checking archive hash for match.")
+        with open(replicated_filepath, "rb") as replicated_archive:
+            with open(os.path.join(replicator_config["directory"], CMD_PARSED.archive_name.split(".zip")[0] + ".blake2b.txt"), "r") as replicated_archive_hash:
+                if not hashlib.blake2b(replicated_archive.read()).hexdigest() == replicated_archive_hash.read():
+                    print("Replicated archive hash doesn't match saved hash in file. Exiting.")
+                    exit(1)
 
     with tempfile.TemporaryDirectory() as tmp:
+        print("1/5: Unpacking archive to temporary directory.")
         shutil.unpack_archive(replicated_filepath, tmp)
 
+        print("2/5: Establishing connection to new Iamages database.")
         conn = sqlite3.connect(os.path.join(tmp, "iamages.db"))
         cur = conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
 
+        print("3/5: Restoring Files table from CSV.")
         FILES_CSV_PATH = os.path.join(tmp, "Files.csv")
         with open(FILES_CSV_PATH, "r") as csv_files:
             cur.execute("CREATE TABLE Files (FileID INTEGER PRIMARY KEY, FileName TEXT, FileDescription TEXT, FileNSFW INTEGER, FilePrivate INTEGER, FileMime TEXT, FileWidth INTEGER, FileHeight INTEGER, FileHash TEXT, FileLink INTEGER, FileCreatedDate TEXT, FileExcludeSearch INTEGER)")
-            reader = csv.DictReader(csv_files)
-            for row in reader:
+            pbar = tqdm(csv.DictReader(csv_files))
+            for row in pbar:
                 cur.execute("INSERT INTO Files (FileID, FileName, FileDescription, FileNSFW, FilePrivate, FileMime, FileWidth, FileHeight, FileHash, FileLink, FileCreatedDate, FileExcludeSearch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
                     row["FileID"], row["FileName"], row["FileDescription"], row["FileNSFW"], row["FilePrivate"], row["FileMime"], row["FileWidth"], row["FileHeight"], row["FileHash"], row["FileLink"], row["FileCreatedDate"], row["FileExcludeSearch"]))
         os.remove(FILES_CSV_PATH)
 
+        print("4/5: Restoring Files_Users table from CSV.")
         FILES_USERS_CSV_PATH = os.path.join(tmp, "Files_Users.csv")
         with open(FILES_USERS_CSV_PATH, "r") as csv_files_users:
             cur.execute("CREATE TABLE Files_Users (FileID INTEGER, UserID INTEGER)")
-            reader = csv.DictReader(csv_files_users)
-            for row in reader:
+            pbar = tqdm(csv.DictReader(csv_files_users))
+            for row in pbar:
                 cur.execute("INSERT INTO Files_Users (FileID, UserID) VALUES (?, ?)", (
                     row["FileID"], row["UserID"]))
         os.remove(FILES_USERS_CSV_PATH)
 
+        print("4/5: Restoring Users table from CSV.")
         USERS_CSV_PATH = os.path.join(tmp, "Users.csv")
         with open(USERS_CSV_PATH, "r") as csv_users:
             cur.execute("CREATE TABLE Users (UserID INTEGER PRIMARY KEY, UserName TEXT, UserPassword TEXT, UserBiography TEXT, UserCreatedDate TEXT)")
-            reader = csv.DictReader(csv_users)
-            for row in reader:
+            pbar = tqdm(csv.DictReader(csv_users))
+            for row in pbar:
                 cur.execute("INSERT INTO Users (UserID, UserName, UserPassword, UserBiography, UserCreatedDate) VALUES (?, ?, ?, ?, ?)", (
                     row["UserID"], row["UserName"], row["UserPassword"], row["UserBiography"], row["UserCreatedDate"]))
         os.remove(USERS_CSV_PATH)
@@ -164,12 +191,14 @@ elif CMD_PARSED.command == "restore":
         conn.commit()
         conn.close()
 
+        print("5/5: Restoring files storage directory.")
         shutil.rmtree(server_config["files"]["storage"]["directory"])
         shutil.copytree(tmp, server_config["files"]["storage"]["directory"])
 elif CMD_PARSED.command == "delete":
+    print("1/1: Removing given archive.")
     delete_archive(CMD_PARSED.archive_name)
 elif CMD_PARSED.command == "list":
-    print("\nAvailable replicated archives:\n")
+    print("Available replicated archives:\n")
     for save in archives:
         archive_filepath = os.path.join(replicator_config["directory"], save + ".zip")
         if os.path.isfile(archive_filepath):
@@ -186,4 +215,8 @@ elif CMD_PARSED.command == "list":
                 print(f'    + Archive hash: disabled')
         else:
             print(f'- {save} (not found)')
-    print("")
+else:
+    print(f"Command '{str(CMD_PARSED.command)}' hasn't been implimented yet!")
+    
+print("")
+print("Done!")

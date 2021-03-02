@@ -13,7 +13,6 @@ import mimetypes
 import PIL.Image
 import aiofiles
 import aiofiles.os
-import shutil
 import uuid
 import asynctempfile
 import starlette.applications
