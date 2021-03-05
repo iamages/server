@@ -1,4 +1,4 @@
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __copyright__ = "© jkelol111 et al 2021-present"
 
 import argparse

@@ -1,4 +1,4 @@
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __copyright__ = "© jkelol111 et al 2020-present"
 
 import os
@@ -53,6 +53,8 @@ if not os.path.isdir(THUMBS_PATH):
     os.makedirs(THUMBS_PATH)
 
 templates = starlette.templating.Jinja2Templates(directory=os.path.join(IAMAGES_PATH, "templates"))
+
+PIL.Image.MAX_IMAGE_PIXELS = None
 
 class SharedFunctions:
     @staticmethod
@@ -154,13 +156,16 @@ class SharedFunctions:
 
     @staticmethod
     async def create_thumb(FileName: str, FileMime: str) -> None:
-        new_thumb_path = os.path.join(THUMBS_PATH, FileName)
-        with PIL.Image.open(os.path.join(FILES_PATH, FileName)) as img:
-            img.thumbnail((600, 600), PIL.Image.LANCZOS)
-            if FileMime == "image/gif":
-                img.save(new_thumb_path, save_all=True)
-            else:
-                img.save(new_thumb_path)
+        def sync_task():
+            new_thumb_path = os.path.join(THUMBS_PATH, FileName)
+            with PIL.Image.open(os.path.join(FILES_PATH, FileName)) as img:
+                img.thumbnail((600, 600), PIL.Image.LANCZOS)
+                if FileMime == "image/gif":
+                    img.save(new_thumb_path, save_all=True)
+                else:
+                    img.save(new_thumb_path)
+
+        await starlette.concurrency.run_in_threadpool(sync_task)
 
     @staticmethod
     async def parse_request_json(request):
