@@ -1,8 +1,8 @@
 iamages_storage
 iamages_replicated
-iamages_dedicated_delivery
 __pycache__
 .vscode
 .DS_Store
 servercfg.json
+servercfg.toml
 replicatorcfg.json

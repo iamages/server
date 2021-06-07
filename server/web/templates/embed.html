@@ -1,0 +1,42 @@
+<html prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta name="robots" content="noindex">
+    <title>{{description}} - on Iamages</title>
+    <meta name="description" content="{{description}}">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Iamages">
+    <meta property="og:title" content="{{description}} - on Iamages">
+    <meta property="og:description" content="{{description}}">
+    <meta property="og:url" content="{{ url_for(**{'name': 'embed', 'id': id}) }}">
+    <meta property="og:image" content="{{ url_for(**{'name': 'thumb', 'id': id}) }}">
+    <meta property="og:image:type" content="{{mime}}">
+    <meta property="og:image:width" content="{{width}}">
+    <meta property="og:image:height" content={{height}}>
+    <meta property="og:image:alt" content="{{description}}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{description}} - on Iamages">
+    <meta name="twitter:description" content="{{description}}">
+    <meta name="twitter:image" content="{{ url_for(**{'name': 'thumb', 'id': id}) }}">
+    <meta name="twitter:image:alt" content="{{description}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+  </head>
+  <body>
+    <section class="section">
+      <div class="container">
+        <figure class="image is-48x48">
+          <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}">
+        </figure>
+        <br>
+        <h2 class="title">{{description}}</h2>
+        <hr>
+        <img src="{{ url_for(**{'name': 'img', 'id': id}) }}" alt="We couldn't find the file you wanted :(">
+        <hr>
+        <p>
+          Served from Iamages, the open source image sharing platform.
+        </p>
+      </div>
+    </section>
+  </body>
+</html>

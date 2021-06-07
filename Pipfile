@@ -4,21 +4,20 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-starlette = "*"
-jinja2 = "*"
-aiofiles = "*"
-databases = {extras = ["sqlite"], version = "*"}
-bcrypt = "*"
-pillow = "*"
-gunicorn = "*"
+fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
-filetype = "*"
-setproctitle = "*"
-asynctempfile = "*"
+gunicorn = "*"
+rethinkdb = "*"
 tqdm = "*"
+pillow = "*"
+aiofiles = "*"
+ujson = "*"
+orjson = "*"
+passlib = {extras = ["argon2", "bcrypt"], version = "*"}
+python-multipart = "*"
+jinja2 = "*"
 
 [dev-packages]
-pyinstaller = "*"
 
 [requires]
 python_version = "3.9"
