@@ -40,11 +40,11 @@ Changes in the code will automatically be reloaded if you start the server using
 
 Most of the time, Iamages Server updates are as simple as getting a new copy, replacing the older one, and restart the server. However, database/storage layout changes may occur between updates (rarely), in which case you will have to follow this section in addition to updating the server.
 
-1. Archive/backup the current server using `isdbi/isdbi.py` (more instructions below).
-2. Run `isupdb/isupdb.py`
+1. Archive/backup the current server using `scripts/storagearchive.py` (view instructions in `scripts/README.md`).
+2. Run `scripts/dbupgrade.py`
 3. Start the new server. If no errors come up, you should be good to go (test some endpoints for good measure).
 
-If errors come up, it's a matter of rolling back to the older server version, and restoring an archive/backup using `isdbi/isdbi.py`.
+If errors come up, it's a matter of rolling back to the older server version, and restoring an archive/backup using `scripts/storagearchive.py`.
 
 ## Additional reading
 
