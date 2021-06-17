@@ -1,14 +1,16 @@
 __version__ = "3.0.0"
 __copyright__ = "© jkelol111 et al 2021-present"
 
-import pathlib
-import sqlite3
-import rethinkdb
-import orjson
 import datetime
-import uuid
 import mimetypes
+import pathlib
 import shutil
+import sqlite3
+import uuid
+from getpass import getpass
+
+import orjson
+import rethinkdb
 from tqdm import tqdm
 
 print("[Upgrade Iamages Database version '{0}'. {1}]".format(__version__, __copyright__))
@@ -41,7 +43,11 @@ storedb_connection = sqlite3.connect(FILESDB_PATH)
 storedb_cursor = storedb_connection.cursor()
 
 r = rethinkdb.RethinkDB()
-conn = r.connect(user="admin", db="iamages")
+conn = r.connect(
+    user="admin",
+    password=getpass("Enter 'admin' password: "),
+    db="iamages"
+)
 
 print("- Creating new database user 'iamages' & password 'iamages'.")
 r.db("rethinkdb").table("users").insert({
@@ -130,9 +136,9 @@ for file_user in tqdm(storedb_cursor.execute("SELECT * FROM Files_Users").fetcha
             "owner": user_id_map[str(file_user[1])]
         }).run(conn)
 
-print("- Writing database information")
+print("- Writing database information.")
 r.table("internal").insert({
-    "version": 3,
+    "version": UPGRADED_FORMAT,
     "created": r.now()
 }).run(conn)
 

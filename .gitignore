@@ -3,6 +3,7 @@ iamages_replicated
 __pycache__
 .vscode
 .DS_Store
+.env
 servercfg.json
 servercfg.toml
 replicatorcfg.json

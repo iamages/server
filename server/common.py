@@ -21,7 +21,6 @@ class ServerConfig(BaseSettings):
     max_size: int = 10485760
     accept_mimes: List[str] = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/apng", "image/webp"]
     storage_dir: DirectoryPath
-    storage_ver: int = SUPPORTED_STORAGE_VER
     db_host: str = "localhost"
     db_port: int = 28015
     db_user: str = "iamages"
@@ -41,7 +40,7 @@ conn = r.connect(
     password=server_config.db_pwd,
     db="iamages"
 )
-if r.table("internal").order_by(r.desc("created")).sample(1).run(conn)[0]["version"] != server_config.storage_ver:
+if r.table("internal").order_by(r.desc("created")).sample(1).run(conn)[0]["version"] != SUPPORTED_STORAGE_VER:
     exit(1)
 
 templates = Jinja2Templates(directory=Path("./server/web/templates"))
