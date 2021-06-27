@@ -88,7 +88,7 @@ def upload(
     hidden: bool = Form(...),
     upload_file: UploadFile = File(...),
     authorization: Optional[str] = Header(None)):
-    if len(description) <= 2:
+    if len(description) < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
     if not upload_file.content_type in server_config.accept_mimes:
@@ -118,11 +118,10 @@ def upload(
     }
 
     user_information_parsed = process_basic_auth(authorization)
-
-    if private and not user_information_parsed:
-        new_file_path.unlink()
-        raise HTTPException(status.HTTP_403_FORBIDDEN)
-    else:
+    if private:
+        if not user_information_parsed:
+            new_file_path.unlink()
+            raise HTTPException(status.HTTP_403_FORBIDDEN)
         file_information["owner"] = user_information_parsed.username
         file_information["private"] = private
 
@@ -182,10 +181,10 @@ def websave(
     }
 
     user_information_parsed = process_basic_auth(authorization)
-    if private and not user_information_parsed:
-        new_file_path.unlink()
-        raise HTTPException(status.HTTP_403_FORBIDDEN)
-    else:
+    if private:
+        if not user_information_parsed:
+            new_file_path.unlink()
+            raise HTTPException(status.HTTP_403_FORBIDDEN)
         file_information["owner"] = user_information_parsed.username
         file_information["private"] = private
 
