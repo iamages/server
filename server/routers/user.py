@@ -23,7 +23,11 @@ router = APIRouter(
 def shutdown_event():
     conn.close()
 
-@router.get("/{username}/info", response_model=UserBase)
+@router.get(
+    "/{username}/info",
+    response_model=UserBase,
+    description="Gets information for an user."
+)
 def info(username: str):
     user_information = r.table("users").get(username).run(conn)
     if not user_information:
@@ -31,12 +35,16 @@ def info(username: str):
 
     return user_information
 
-@router.post("/{username}/files", response_model=List[FileBase])
+@router.post(
+    "/{username}/files", 
+    response_model=List[FileBase],
+    description="Get files owned by an user."
+)
 def files(
     username: str,
     authorization: Optional[str] = Header(None),
-    limit: Optional[int] = Form(None),
-    start_date: Optional[datetime] = Form(None)
+    limit: Optional[int] = Form(None, description="Limit file results."),
+    start_date: Optional[datetime] = Form(None, description="Date to start returning results from.")
 ):
     if not r.table("users").get(username).run(conn):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -57,13 +65,17 @@ def files(
 
     return query.run(conn)
 
-@router.post("/{username}/files/search", response_model=List[FileBase])
+@router.post(
+    "/{username}/files/search",
+    response_model=List[FileBase],
+    description="Searches through an user's files."
+)
 def search(
     username: str,
     authorization: Optional[str] = Header(None),
     description: str = Form(...),
-    limit: Optional[int] = Form(None),
-    start_date: Optional[datetime] = Form(None)
+    limit: Optional[int] = Form(None, description="Limit search results."),
+    start_date: Optional[datetime] = Form(None, description="Date to start searching from.")
 ):
     query = r.table("files")
     filters = (r.row["owner"] == username) & (r.row["description"].match(f"(?i){description}"))
@@ -82,8 +94,15 @@ def search(
 
     return query.run(conn)
 
-@router.post("/new", response_model=UserBase)
-def new(username: str = Form(...), password: str = Form(...)):
+@router.post(
+    "/new",
+    response_model=UserBase,
+    description="Creates a new user."
+)
+def new(
+    username: str = Form(...),
+    password: str = Form(...)
+):
     if len(username) <= 2 or len(password) <= 4:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
@@ -99,8 +118,16 @@ def new(username: str = Form(...), password: str = Form(...)):
 
     return user_information
 
-@router.patch("/modify", status_code=status.HTTP_204_NO_CONTENT)
-def modify(field: UserModifiableFields = Form(...), data: str = Form(...), authorization: str = Header(...)):
+@router.patch(
+    "/modify",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Modifies an user."
+)
+def modify(
+    field: UserModifiableFields = Form(..., description="Data field to modify for the file."),
+    data: str = Form(..., description="Data given to the `field`."),
+    authorization: str = Header(...)
+):
     user_information_parsed = process_basic_auth(authorization)
     if not user_information_parsed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
@@ -118,7 +145,10 @@ def modify(field: UserModifiableFields = Form(...), data: str = Form(...), autho
 
     update_query.run(conn)
     
-@router.delete("/delete", status_code=204)
+@router.delete(
+    "/delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Delets an user.")
 def delete(authorization: str = Header(...)):
     user_information_parsed = process_basic_auth(authorization)
     if not user_information_parsed:

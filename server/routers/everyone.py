@@ -38,14 +38,24 @@ router = APIRouter(
 def shutdown_event():
     conn.close()
 
-@router.get("/latest", response_model=List[FileBase])
+@router.get(
+    "/latest",
+    response_model=List[FileBase],
+    description="Gets the latest 10 publicly uploaded files."
+)
 def latest():
     return r.table("files").filter(
         (~r.row["private"]) & (~r.row["hidden"])
     ).order_by(r.desc("created")).limit(10).run(conn)
 
-@router.get("/random", response_model=FileBase)
-def random(nsfw: Optional[bool] = Query(None)):
+@router.get(
+    "/random",
+    response_model=FileBase,
+    description="Gets a random public file."
+)
+def random(
+    nsfw: Optional[bool] = Query(None, description="Return NSFW file?")
+):
     filters = (~r.row["private"]) & (~r.row["hidden"])
     if not nsfw:
         filters = filters & (~r.row["nsfw"])
@@ -57,11 +67,15 @@ def random(nsfw: Optional[bool] = Query(None)):
 
     return file_information[0]
 
-@router.post("/search", response_model=List[FileBase])
+@router.post(
+    "/search",
+    response_model=List[FileBase],
+    description="Searches for files."
+)
 def search(
-    description: str = Form(...),
-    limit: Optional[int] = Form(None),
-    start_date: Optional[datetime] = Form(None)
+    description: str = Form(..., description="Description to search for."),
+    limit: Optional[int] = Form(None, description="Limit search results."),
+    start_date: Optional[datetime] = Form(None, description="Date to start searching from.")
 ):
     query = r.table("files")
     filters = r.row["description"].match(f"(?i){description}") & (~r.row["private"]) & (~r.row["hidden"])
@@ -79,13 +93,14 @@ def search(
 @router.post(
     "/upload",
     response_model=FileBase,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    description="Uploads a file from the submitted form."
 )
 def upload(
     description: str = Form(...),
     nsfw: bool = Form(...),
-    private: Optional[bool] = Form(False),
-    hidden: bool = Form(...),
+    private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
+    hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_file: UploadFile = File(...),
     authorization: Optional[str] = Header(None)):
     if len(description) < 1:
@@ -132,13 +147,14 @@ def upload(
 @router.post(
     "/websave",
     response_model=FileBase,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    description="Uploads a file from the internet."
 )
 def websave(
     description: str = Form(...),
     nsfw: bool = Form(...),
-    private: Optional[bool] = Form(False),
-    hidden: bool = Form(...),
+    private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
+    hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_url: AnyHttpUrl = Form(...),
     authorization: Optional[str] = Header(None)):
     if len(description) <= 2:
@@ -195,7 +211,8 @@ def websave(
 @router.get(
     "/private/tos",
     response_class=HTMLResponse,
-    include_in_schema=False)
+    include_in_schema=False
+)
 async def tos(request: Request):
     return templates.TemplateResponse("tos.html", {
         "request": request,

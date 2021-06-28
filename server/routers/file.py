@@ -45,8 +45,15 @@ router = APIRouter(
 def shutdown_event():
     conn.close()
 
-@router.get("/{id}/info", response_model=FileBase)
-def info(id: UUID, authorization: Optional[str] = Header(None)):
+@router.get(
+    "/{id}/info",
+    response_model=FileBase,
+    description="Gets information for a file."
+)
+def info(
+    id: UUID,
+    authorization: Optional[str] = Header(None)
+):
     file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -61,8 +68,16 @@ def info(id: UUID, authorization: Optional[str] = Header(None)):
     
     return file_information
 
-@router.get("/{id}/img", response_class=FileResponse, name="img")
-def img(id: UUID, authorization: Optional[str] = Header(None)):
+@router.get(
+    "/{id}/img",
+    response_class=FileResponse,
+    name="img",
+    description="Gets image for a file."
+)
+def img(
+    id: UUID,
+    authorization: Optional[str] = Header(None)
+):
     file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -81,8 +96,17 @@ def img(id: UUID, authorization: Optional[str] = Header(None)):
 
     return FileResponse(img_path, media_type=file_information_parsed.mime)
 
-@router.get("/{id}/thumb", response_class=FileResponse, name="thumb")
-def thumb(id: UUID, background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
+@router.get(
+    "/{id}/thumb",
+    response_class=FileResponse,
+    name="thumb",
+    description="Gets thumbnail for a file."
+)
+def thumb(
+    id: UUID,
+    background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(None)
+):
     file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -107,8 +131,16 @@ def thumb(id: UUID, background_tasks: BackgroundTasks, authorization: Optional[s
 
     return FileResponse(thumb_path, media_type=file_information_parsed.mime)
 
-@router.get("/{id}/embed", response_class=HTMLResponse, name="embed")
-def embed(request: Request, id: UUID):
+@router.get(
+    "/{id}/embed",
+    response_class=HTMLResponse,
+    name="embed",
+    description="Gets embed for a file."
+)
+def embed(
+    request: Request,
+    id: UUID
+):
     file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -124,11 +156,15 @@ def embed(request: Request, id: UUID):
         "height": file_information_parsed.height
     })
 
-@router.patch("/{id}/modify", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch(
+    "/{id}/modify",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Modifies a file."
+)
 def modify(
     id: UUID,
-    field: FileModifiableFields = Form(...),
-    data: Union[str, bool] = Form(...),
+    field: FileModifiableFields = Form(..., description="Data field to modify for the file."),
+    data: Union[str, bool] = Form(..., description="Data given to the `field`."),
     authorization: str = Header(...)
 ):
     user_information_parsed = process_basic_auth(authorization)
@@ -160,8 +196,15 @@ def modify(
 
     update_query.run(conn)
 
-@router.delete("/{id}/delete", status_code=status.HTTP_204_NO_CONTENT)
-def delete(id: UUID, authorization: str = Header(...)):
+@router.delete(
+    "/{id}/delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Deletes a file."
+)
+def delete(
+    id: UUID,
+    authorization: str = Header(...)
+):
     user_information_parsed = process_basic_auth(authorization)
     if not user_information_parsed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
@@ -181,8 +224,16 @@ def delete(id: UUID, authorization: str = Header(...)):
 
     r.table("files").get(str(id)).delete().run(conn)
 
-@router.post("/{id}/duplicate", response_model=FileBase, status_code=status.HTTP_201_CREATED)
-def duplicate(id: UUID, authorization: str = Header(...)):
+@router.post(
+    "/{id}/duplicate",
+    response_model=FileBase, 
+    status_code=status.HTTP_201_CREATED,
+    description="Duplicates a file into an account."
+)
+def duplicate(
+    id: UUID,
+    authorization: str = Header(...)
+):
     user_information_parsed = process_basic_auth(authorization)
     if not user_information_parsed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
@@ -191,6 +242,9 @@ def duplicate(id: UUID, authorization: str = Header(...)):
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     file_information_parsed = FileInDB(**file_information)
+
+    if file_information_parsed.private and (file_information_parsed.owner != user_information_parsed.username):
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
 
     duplicated_file_name = uuid4().hex + file_information_parsed.file.suffix
 
