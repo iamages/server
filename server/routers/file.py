@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from os import fstat
 from pathlib import Path
-from shutil import copyfile, copyfileobj
+from shutil import copyfile
 from tempfile import NamedTemporaryFile
 from typing import Optional, Union
 from uuid import UUID, uuid4
