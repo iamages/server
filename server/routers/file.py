@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from enum import Enum
+from os import fstat
 from pathlib import Path
-from shutil import copyfile
+from shutil import copyfile, copyfileobj
+from tempfile import NamedTemporaryFile
 from typing import Optional, Union
 from uuid import UUID, uuid4
 
@@ -28,13 +30,21 @@ def create_thumb(img_filename: Path, mime: str):
 
     thumb_path = Path(server_config.storage_dir, "thumbs", img_filename)
 
-    with Image.open(img_path) as img:
-        img.thumbnail((600, 600), Image.LANCZOS)
+    with NamedTemporaryFile(suffix=img_filename.suffix) as temp:
+        with Image.open(img_path) as img:
+            img.thumbnail((600, 600), Image.LANCZOS)
 
-        if mime in ["image/tiff", "image/apng", "image/gif", "image/webp"]:
-            img.save(thumb_path, save_all=True)
-        else:
-            img.save(thumb_path)
+            if mime in ["image/tiff", "image/apng", "image/gif", "image/webp"]:
+                img.save(temp, save_all=True)
+            else:
+                img.save(temp)
+
+        if fstat(temp.fileno()).st_size > img_path.stat().st_size:
+            copyfile(img_path, thumb_path)
+            return
+
+        copyfile(temp.name, img_path)
+
 
 router = APIRouter(
     prefix="/file",
