@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from mimetypes import guess_extension
 from pathlib import Path
 from tempfile import TemporaryFile
-from typing import List, Optional, Tuple, IO
+from traceback import print_exc
+from typing import IO, List, Optional, Tuple
 from urllib.request import urlopen
 from uuid import uuid4
 
@@ -117,6 +118,8 @@ def upload(
 
     new_file_name: str = uuid4().hex + guess_extension(upload_file.content_type)
     new_file_path: Path = Path(server_config.storage_dir, "files", new_file_name)
+    if new_file_path.exists():
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
     file_dimensions = save_img(upload_file.file, new_file_path, upload_file.content_type)
 
     file_information = {
@@ -140,7 +143,12 @@ def upload(
         file_information["owner"] = user_information_parsed.username
         file_information["private"] = private
 
-    r.table("files").insert(file_information).run(conn)
+    try:
+        r.table("files").insert(file_information).run(conn)
+    except:
+        print_exc()
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
@@ -171,15 +179,17 @@ def websave(
         if not file_mime in server_config.accept_mimes:
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
+        new_file_name = uuid4().hex + guess_extension(file_mime)
+        new_file_path = Path(server_config.storage_dir, "files", new_file_name)
+        if new_file_path.exists():
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         real_file_size = 0
         for chunk in fsrc:
             real_file_size += len(chunk)
             if real_file_size > server_config.max_size:
                 raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
             fdst.write(chunk)
-
-        new_file_name = uuid4().hex + guess_extension(file_mime)
-        new_file_path = Path(server_config.storage_dir, "files", new_file_name)
 
         file_dimensions = save_img(fdst, new_file_path, file_mime)
 
@@ -204,7 +214,12 @@ def websave(
         file_information["owner"] = user_information_parsed.username
         file_information["private"] = private
 
-    r.table("files").insert(file_information).run(conn)
+    try:
+        r.table("files").insert(file_information).run(conn)
+    except:
+        print_exc()
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
