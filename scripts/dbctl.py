@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from getpass import getpass
+from pathlib import Path
 from pprint import pprint
 
 from rethinkdb import RethinkDB
@@ -43,6 +44,14 @@ elif arg_parsed.command == "getfile":
     pprint(r.table("files").get(arg_parsed.data).run(conn))
 elif arg_parsed.command == "getuser":
     pprint(r.table("users").get(arg_parsed.data).run(conn))
+elif arg_parsed.command == "deletefile":
+    file_information = r.table("files").get(arg_parsed.data).run(conn)
+    if not file_information:
+        print("File doesn't exist!")
+        exit(1)
+    Path(server_config.storage_dir, "files", file_information["file"]).unlink()
+    Path(server_config.storage_dir, "thumbs", file_information["file"]).unlink()
+    r.table("files").get(arg_parsed.data).delete().run(conn)
 else:
     print("Command doesn't exist!")
 
