@@ -61,9 +61,9 @@ def random(
     if not nsfw:
         filters = filters & (~r.row["nsfw"])
 
-    file_information = r.table("files").filter(filters).sample(1).run(conn)[0]
+    file_information = r.table("files").filter(filters).sample(1).run(conn)
 
-    if file_information == []:
+    if not file_information or file_information[0] == []:
         raise HTTPException(503)
 
     return file_information[0]

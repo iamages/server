@@ -16,6 +16,7 @@ orjson = "*"
 passlib = {extras = ["argon2", "bcrypt"], version = "*"}
 python-multipart = "*"
 jinja2 = "*"
+setproctitle = "*"
 
 [dev-packages]
 
