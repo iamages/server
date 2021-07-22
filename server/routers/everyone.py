@@ -21,7 +21,6 @@ def save_img(fp: IO, path: Path, mime: str) -> Tuple[int]:
     with Image.open(fp) as img:
         save_args = {
             "fp": path,
-            "optimize": True,
             "quality": 100
         }
 

@@ -156,6 +156,8 @@ def embed(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     file_information_parsed = FileInDB(**file_information)
+    if file_information_parsed.private:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
     return templates.TemplateResponse("embed.html", {
         "request": request,
