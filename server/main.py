@@ -35,15 +35,15 @@ app = FastAPI(
     default_response_class=ORJSONResponse
 )
 
+app.mount("/private/static", StaticFiles(directory=Path("./server/web/static")), name="static")
+app.include_router(everyone.router)
+app.include_router(file.router)
+app.include_router(user.router)
+
+app.add_middleware(GZipMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"]
 )
-app.add_middleware(GZipMiddleware)
-
-app.mount("/private/static", StaticFiles(directory=Path("./server/web/static")), name="static")
-app.include_router(everyone.router)
-app.include_router(file.router)
-app.include_router(user.router)
