@@ -136,12 +136,13 @@ def upload(
     }
 
     user_information_parsed = process_basic_auth(authorization)
-    if private:
-        if not user_information_parsed:
-            new_file_path.unlink()
-            raise HTTPException(status.HTTP_403_FORBIDDEN)
+    if user_information_parsed:
         file_information["owner"] = user_information_parsed.username
-        file_information["private"] = private
+        if private:
+            file_information["private"] = private
+    elif not user_information_parsed and private:
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
 
     try:
         r.table("files").insert(file_information).run(conn)
@@ -207,12 +208,13 @@ def websave(
     }
 
     user_information_parsed = process_basic_auth(authorization)
-    if private:
-        if not user_information_parsed:
-            new_file_path.unlink()
-            raise HTTPException(status.HTTP_403_FORBIDDEN)
+    if user_information_parsed:
         file_information["owner"] = user_information_parsed.username
-        file_information["private"] = private
+        if private:
+            file_information["private"] = private
+    elif not user_information_parsed and private:
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
 
     try:
         r.table("files").insert(file_information).run(conn)
