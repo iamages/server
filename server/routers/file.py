@@ -43,7 +43,7 @@ def create_thumb(img_filename: Path, mime: str):
             copyfile(img_path, thumb_path)
             return
 
-        copyfile(temp.name, img_path)
+        copyfile(temp.name, thumb_path)
 
 
 router = APIRouter(
