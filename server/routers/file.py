@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from distutils.util import strtobool
 from enum import Enum
 from os import fstat
 from pathlib import Path
@@ -45,6 +46,13 @@ def create_thumb(img_filename: Path, mime: str):
 
         copyfile(temp.name, thumb_path)
 
+def handle_str2bool(boolstr):
+    if isinstance(boolstr, bool):
+        return boolstr
+    try:
+        return bool(strtobool(boolstr))
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
 router = APIRouter(
     prefix="/file",
@@ -176,7 +184,7 @@ def embed(
 def modify(
     id: UUID,
     field: FileModifiableFields = Form(..., description="Data field to modify for the file."),
-    data: Union[str, bool] = Form(..., description="Data given to the `field`."),
+    data: Union[bool, str] = Form(..., description="Data given to the `field`."),
     authorization: str = Header(...)
 ):
     user_information_parsed = process_basic_auth(authorization)
@@ -195,15 +203,15 @@ def modify(
         })
     elif field == FileModifiableFields.nsfw:
         update_query = update_query.update({
-            "nsfw": bool(data)
+            "nsfw": handle_str2bool(data)
         })
     elif field == FileModifiableFields.private:
         update_query = update_query.update({
-            "private": bool(data)
+            "private": handle_str2bool(data)
         })
     elif field == FileModifiableFields.hidden:
         update_query = update_query.update({
-            "hidden": bool(data)
+            "hidden": handle_str2bool(data)
         })
 
     update_query.run(conn)
