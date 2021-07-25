@@ -7,14 +7,16 @@ from typing import IO, List, Optional, Tuple
 from urllib.request import urlopen
 from uuid import uuid4
 
-from fastapi import (APIRouter, File, Form, Header, HTTPException, Query,
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      Request, UploadFile, status)
 from fastapi.responses import HTMLResponse
 from PIL import Image
 from pydantic import AnyHttpUrl
 
-from ..common import conn, process_basic_auth, r, server_config, templates
+from ..common import (FILES_PATH, auth_optional_dependency, conn, r,
+                      server_config, templates)
 from ..modals.file import FileBase
+from ..modals.user import UserBase
 
 
 def save_img(fp: IO, path: Path, mime: str) -> Tuple[int]:
@@ -103,7 +105,8 @@ def upload(
     private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None)):
+    user: Optional[UserBase] = Depends(auth_optional_dependency)
+):
     if len(description) < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
@@ -117,7 +120,7 @@ def upload(
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
     new_file_name: str = uuid4().hex + guess_extension(upload_file.content_type)
-    new_file_path: Path = Path(server_config.storage_dir, "files", new_file_name)
+    new_file_path: Path = Path(FILES_PATH, new_file_name)
     if new_file_path.exists():
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
     file_dimensions = save_img(upload_file.file, new_file_path, upload_file.content_type)
@@ -135,12 +138,11 @@ def upload(
         "file": new_file_name,
     }
 
-    user_information_parsed = process_basic_auth(authorization)
-    if user_information_parsed:
-        file_information["owner"] = user_information_parsed.username
+    if user:
+        file_information["owner"] = user.username
         if private:
             file_information["private"] = private
-    elif not user_information_parsed and private:
+    elif not user and private:
         new_file_path.unlink()
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 
@@ -165,7 +167,8 @@ def websave(
     private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_url: AnyHttpUrl = Form(...),
-    authorization: Optional[str] = Header(None)):
+    user: Optional[UserBase] = Depends(auth_optional_dependency)
+):
     if len(description) <= 2:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
@@ -174,25 +177,29 @@ def websave(
     file_dimensions: Tuple[int] = (0, 0)
     file_mime: str = ""
 
-    with urlopen(upload_url) as fsrc, TemporaryFile() as fdst:
-        file_mime = fsrc.headers["Content-Type"]
+    try:
+        with urlopen(upload_url) as fsrc, TemporaryFile() as fdst:
+            file_mime = fsrc.headers["Content-Type"]
 
-        if not file_mime in server_config.accept_mimes:
-            raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+            if not file_mime in server_config.accept_mimes:
+                raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-        new_file_name = uuid4().hex + guess_extension(file_mime)
-        new_file_path = Path(server_config.storage_dir, "files", new_file_name)
-        if new_file_path.exists():
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+            new_file_name = uuid4().hex + guess_extension(file_mime)
+            new_file_path = Path(server_config.storage_dir, "files", new_file_name)
+            if new_file_path.exists():
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        real_file_size = 0
-        for chunk in fsrc:
-            real_file_size += len(chunk)
-            if real_file_size > server_config.max_size:
-                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-            fdst.write(chunk)
+            real_file_size = 0
+            for chunk in fsrc:
+                real_file_size += len(chunk)
+                if real_file_size > server_config.max_size:
+                    raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+                fdst.write(chunk)
 
-        file_dimensions = save_img(fdst, new_file_path, file_mime)
+            file_dimensions = save_img(fdst, new_file_path, file_mime)
+    except:
+        print_exc()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     file_information = {
         "id": str(uuid4()),
@@ -207,12 +214,11 @@ def websave(
         "file": new_file_name
     }
 
-    user_information_parsed = process_basic_auth(authorization)
-    if user_information_parsed:
-        file_information["owner"] = user_information_parsed.username
+    if user:
+        file_information["owner"] = user.username
         if private:
             file_information["private"] = private
-    elif not user_information_parsed and private:
+    elif not user and private:
         new_file_path.unlink()
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 

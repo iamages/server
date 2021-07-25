@@ -25,7 +25,7 @@ tags_metadata = [
 
 app = FastAPI(
     title="Iamages",
-    description="Simple image sharing server.\n\n**All `Authentication` headers use HTTP Basic Auth.**",
+    description="Simple image sharing server.",
     version="v2",
     openapi_url="/openapi.json",
     docs_url=None,

@@ -3,14 +3,15 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Form, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Form, HTTPException, status
 
-from ..common import conn, process_basic_auth, pwd_context, r, server_config
+from ..common import (FILES_PATH, THUMBS_PATH, auth_optional_dependency,
+                      auth_required_dependency, conn, pwd_context, r)
 from ..modals.file import FileBase, FileInDB
-from ..modals.user import UserBase
+from ..modals.user import UserBase, UserInDB
 
 
-class UserModifiableFields(Enum):
+class UserModifiableFields(str, Enum):
     username: str = "username" 
     password: str = "password"
 
@@ -42,7 +43,7 @@ def info(username: str):
 )
 def files(
     username: str,
-    authorization: Optional[str] = Header(None),
+    user: Optional[UserBase] = Depends(auth_optional_dependency),
     limit: Optional[int] = Form(None, description="Limit file results."),
     start_date: Optional[datetime] = Form(None, description="Date to start returning results from.")
 ):
@@ -51,8 +52,7 @@ def files(
 
     filters = r.row["owner"] == username
 
-    user_information_parsed = process_basic_auth(authorization)
-    if not user_information_parsed:
+    if not user:
         filters = filters & (~r.row["private"]) & (~r.row["hidden"])
 
     if start_date:
@@ -72,7 +72,7 @@ def files(
 )
 def search(
     username: str,
-    authorization: Optional[str] = Header(None),
+    user: Optional[UserBase] = Depends(auth_optional_dependency),
     description: str = Form(...),
     limit: Optional[int] = Form(None, description="Limit search results."),
     start_date: Optional[datetime] = Form(None, description="Date to start searching from.")
@@ -80,8 +80,7 @@ def search(
     query = r.table("files")
     filters = (r.row["owner"] == username) & (r.row["description"].match(f"(?i){description}"))
 
-    user_information_parsed = process_basic_auth(authorization)
-    if not user_information_parsed:
+    if not user:
         filters = filters & (~r.row["private"]) & (~r.row["hidden"])
 
     if start_date:
@@ -109,14 +108,15 @@ def new(
     if r.table("users").get(username).run(conn):
         raise HTTPException(status.HTTP_409_CONFLICT)
 
-    user_information = {
-        "username": username,
-        "password": pwd_context.hash(password),
-        "created": datetime.now(timezone.utc)
-    }
-    r.table("users").insert(user_information).run(conn)
+    user_information_parsed = UserInDB(
+        username=username,
+        password=password,
+        created=datetime.now(timezone.utc)
+    )
 
-    return user_information
+    r.table("users").insert(user_information_parsed.dict()).run(conn)
+
+    return user_information_parsed.dict()
 
 @router.patch(
     "/modify",
@@ -126,13 +126,9 @@ def new(
 def modify(
     field: UserModifiableFields = Form(..., description="Data field to modify for the file."),
     data: str = Form(..., description="Data given to the `field`."),
-    authorization: str = Header(...)
+    user: UserBase = Depends(auth_required_dependency)
 ):
-    user_information_parsed = process_basic_auth(authorization)
-    if not user_information_parsed:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-
-    update_query = r.table("users").get(user_information_parsed.username)
+    update_query = r.table("users").get(user.username)
     
     if field == UserModifiableFields.username:
         update_query = update_query.update({
@@ -148,20 +144,16 @@ def modify(
 @router.delete(
     "/delete",
     status_code=status.HTTP_204_NO_CONTENT,
-    description="Delets an user.")
-def delete(authorization: str = Header(...)):
-    user_information_parsed = process_basic_auth(authorization)
-    if not user_information_parsed:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-
-    for file_information in r.table("files").filter(r.row["owner"] == user_information_parsed.username).run(conn):
+    description="Deletes an user.")
+def delete(user: UserBase = Depends(auth_required_dependency)):
+    for file_information in r.table("files").filter(r.row["owner"] == user.username).run(conn):
         file_information_parsed = FileInDB(**file_information)
-        img_file = Path(server_config.storage_dir, "files", file_information_parsed.file)
-        thumb_file = Path(server_config.storage_dir, "thumbs", file_information_parsed.file)
+        img_file = Path(FILES_PATH, file_information_parsed.file)
+        thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
         if img_file.exists():
             img_file.unlink()
         if thumb_file.exists():
             thumb_file.unlink()
         r.table("files").get(str(file_information_parsed.id)).delete().run(conn)
 
-    r.table("users").get(user_information_parsed.username).delete().run(conn)
+    r.table("users").get(user.username).delete().run(conn)

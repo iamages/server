@@ -1,10 +1,10 @@
-import binascii
 import secrets
-from base64 import b64decode
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi.security.utils import get_authorization_scheme_param
+from fastapi import Depends, status
+from fastapi.exceptions import HTTPException
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
 from PIL import Image
@@ -32,6 +32,9 @@ Image.MAX_IMAGE_PIXELS = None
 
 server_config = ServerConfig()
 
+FILES_PATH = Path(server_config.storage_dir, "files")
+THUMBS_PATH = Path(server_config.storage_dir, "thumbs")
+
 r = RethinkDB()
 conn = r.connect(
     host=server_config.db_host,
@@ -45,46 +48,42 @@ if r.table("internal").order_by(r.desc("created")).sample(1).run(conn)[0]["versi
 
 templates = Jinja2Templates(directory=Path("./server/web/templates"))
 
+auth_required = HTTPBasic()
+auth_optional = HTTPBasic(auto_error=False)
+
 pwd_context = CryptContext(
     schemes=["argon2", "bcrypt"],
     default="argon2",
     deprecated=["bcrypt"]
 )
 
-def process_basic_auth(authorization: Optional[str]) -> Optional[UserBase]:
-    if not authorization:
-        return None
-
-    scheme, credentials = get_authorization_scheme_param(authorization)
-
-    if scheme.lower() != "basic" or not credentials:
-        return None
-    
-    try:
-        credentials_decoded = b64decode(credentials).decode('utf-8')
-    except (ValueError, UnicodeDecodeError, binascii.Error):
-        return None
-
-    username, separator, password = credentials_decoded.partition(":")
-    if not separator:
-        return None
-
-    user_information = r.table("users").get(username).run(conn)
+def process_basic_auth(credentials: HTTPBasicCredentials) -> Optional[UserBase]:
+    user_information = r.table("users").get(credentials.username).run(conn)
     if not user_information:
         return None
 
     user_information_parsed = UserInDB(**user_information)
-    if not (secrets.compare_digest(username, user_information_parsed.username) and pwd_context.verify(password, user_information_parsed.password)):
+    if not (secrets.compare_digest(credentials.username, user_information_parsed.username) and pwd_context.verify(credentials.password, user_information_parsed.password)):
         return None
     
     if pwd_context.needs_update(user_information_parsed.password):
         r.table("users").get(user_information_parsed.username).update({
-            "password": pwd_context.hash(password)
+            "password": pwd_context.hash(credentials.password)
         }).run(conn)
+
     return UserBase(**user_information)
 
-def compare_owner(file_information_parsed: Optional[FileInDB], user_information_parsed: Optional[UserInDB]):
+def auth_required_dependency(credentials: HTTPBasicCredentials = Depends(auth_required)) -> UserBase:
+    user = process_basic_auth(credentials)
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    return user
+
+def auth_optional_dependency(credentials: Optional[HTTPBasicCredentials] = Depends(auth_optional)) -> Optional[UserBase]:
+    if credentials:
+        return process_basic_auth(credentials)
+
+def compare_owner(file_information_parsed: Optional[FileInDB], user_information_parsed: Optional[UserBase]):
     if file_information_parsed.owner and user_information_parsed and secrets.compare_digest(file_information_parsed.owner, user_information_parsed.username):
         return True
-
     return False
