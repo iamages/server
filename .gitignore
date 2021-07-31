@@ -7,3 +7,5 @@ __pycache__
 servercfg.json
 servercfg.toml
 replicatorcfg.json
+iamages_server.spec
+server_build

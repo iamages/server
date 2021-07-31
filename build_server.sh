@@ -1,0 +1,1 @@
+pyinstaller bootstrap_server.py --onefile --console --add-data "server:server"  --name "iamages_server" --clean --distpath "./server_build" --workpath "./server_build/tmp"
