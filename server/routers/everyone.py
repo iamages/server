@@ -236,7 +236,7 @@ def websave(
     response_class=HTMLResponse,
     include_in_schema=False
 )
-def tos(request: Request):
+async def tos(request: Request):
     return templates.TemplateResponse("tos.html", {
         "request": request,
         "owner": {
@@ -250,7 +250,7 @@ def tos(request: Request):
     response_class=HTMLResponse,
     include_in_schema=False
 )
-def privacy(request: Request):
+async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {
         "request": request,
         "owner": {
