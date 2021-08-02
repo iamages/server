@@ -122,7 +122,6 @@ user_id_map = {}
 for user in tqdm(storedb_cursor.execute("SELECT * FROM Users").fetchall()):
     created_datetime = datetime.datetime.strptime(user[4], "%Y-%m-%d %H:%M:%S")
     user_id_map[str(user[0])] = user[1]
-    print(type(user[2]))
     new_user = {
         "username": user[1],
         "password": str(user[2]).replace("b'", "").replace("'", ""),
