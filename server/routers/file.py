@@ -181,34 +181,6 @@ def embed(
         "owner": file_information_parsed.owner or "Anonymous"
     })
 
-@router.get(
-    "/{id}/oembed",
-    name="oembed",
-    description="Gets oEmbed metadata."
-)
-def oembed(
-    request: Request,
-    id: UUID
-):
-    file_information = r.table("files").get(str(id)).run(conn)
-    if not file_information:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-
-    file_information_parsed = FileInDB(**file_information)
-    if file_information_parsed.private:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-
-    return {
-        "version": "1.0",
-        "type": "photo",
-        "provider_name": "Iamages",
-        "provider_url": request.url_for("embed", id=str(id)),
-        "url": request.url_for("thumb", id=str(id)),
-        "width": file_information_parsed.width,
-        "height": file_information_parsed.height,
-        "author_name": file_information_parsed.owner or "Anonymous"
-    }
-
 @router.patch(
     "/{id}/modify",
     status_code=status.HTTP_204_NO_CONTENT,
