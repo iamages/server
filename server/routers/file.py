@@ -174,8 +174,6 @@ def embed(
         "request": request,
         "id": id,
         "description": file_information_parsed.description,
-        "nsfw": file_information_parsed.nsfw,
-        "hidden": file_information_parsed.hidden,
         "mime": file_information_parsed.mime,
         "width": file_information_parsed.width,
         "height": file_information_parsed.height,
