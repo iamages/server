@@ -76,7 +76,7 @@ def random(
     description="Searches for files."
 )
 def search(
-    description: str = Form(..., description="Description to search for."),
+    description: str = Form(..., min_length=1, max_length=50, description="Description to search for."),
     limit: Optional[int] = Form(None, description="Limit search results."),
     start_date: Optional[datetime] = Form(None, description="Date to start searching from.")
 ):
@@ -100,16 +100,13 @@ def search(
     description="Uploads a file from the submitted form."
 )
 def upload(
-    description: str = Form(...),
+    description: str = Form(..., min_length=1, max_length=50),
     nsfw: bool = Form(...),
     private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_file: UploadFile = File(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    if len(description) < 1:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST)
-
     if not upload_file.content_type in server_config.accept_mimes:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
@@ -162,16 +159,13 @@ def upload(
     description="Uploads a file from the internet."
 )
 def websave(
-    description: str = Form(...),
+    description: str = Form(..., min_length=1, max_length=50),
     nsfw: bool = Form(...),
     private: Optional[bool] = Form(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Form(..., description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
     upload_url: AnyHttpUrl = Form(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    if len(description) <= 2:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST)
-
     new_file_name: str = ""
     new_file_path: Path = Path("")
     file_dimensions: Tuple[int] = (0, 0)
@@ -233,6 +227,7 @@ def websave(
 
 @router.get(
     "/private/tos",
+    name="tos",
     response_class=HTMLResponse,
     include_in_schema=False
 )
@@ -247,6 +242,7 @@ async def tos(request: Request):
 
 @router.get(
     "/private/privacy",
+    name="privacy",
     response_class=HTMLResponse,
     include_in_schema=False
 )

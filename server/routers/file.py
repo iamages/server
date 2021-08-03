@@ -179,6 +179,28 @@ def embed(
         "height": file_information_parsed.height
     })
 
+@router.get(
+    "/{id}/oembed",
+    name="oembed",
+    description="Gets oEmbed metadata."
+)
+def oembed(
+    id: UUID
+):
+    file_information = r.table("files").get(str(id)).run(conn)
+    if not file_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    file_information_parsed = FileInDB(**file_information)
+    if file_information_parsed.private:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+
+    return {
+        "author_name": file_information_parsed.description,
+        "provider_name": "Iamages",
+        "type": "photo"
+    }
+
 @router.patch(
     "/{id}/modify",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -187,7 +209,7 @@ def embed(
 def modify(
     id: UUID,
     field: FileModifiableFields = Form(..., description="Data field to modify for the file."),
-    data: Union[bool, str] = Form(..., description="Data given to the `field`."),
+    data: Union[bool, str] = Form(..., min_length=1, max_length=50, description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
     file_information = r.table("files").get(str(id)).run(conn)

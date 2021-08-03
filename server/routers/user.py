@@ -12,7 +12,6 @@ from ..modals.user import UserBase, UserInDB
 
 
 class UserModifiableFields(str, Enum):
-    username: str = "username" 
     password: str = "password"
 
 router = APIRouter(
@@ -125,16 +124,12 @@ def new(
 )
 def modify(
     field: UserModifiableFields = Form(..., description="Data field to modify for the file."),
-    data: str = Form(..., description="Data given to the `field`."),
+    data: str = Form(..., min_length=1, description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
     update_query = r.table("users").get(user.username)
     
-    if field == UserModifiableFields.username:
-        update_query = update_query.update({
-            "username": data
-        })
-    elif field == UserModifiableFields.password:
+    if field == UserModifiableFields.password:
         update_query = update_query.update({
             "password": pwd_context.hash(data)
         })

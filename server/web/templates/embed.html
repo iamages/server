@@ -5,37 +5,59 @@
     <meta name="description" content="{{description}}">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Iamages">
-    <meta property="og:title" content="{{description}} - on Iamages">
+    <meta property="og:title" content="Iamages Embed">
     <meta property="og:description" content="{{description}}">
-    <meta property="og:url" content="{{ url_for(**{'name': 'embed', 'id': id}) }}">
-    <meta property="og:image" content="{{ url_for(**{'name': 'thumb', 'id': id}) }}">
+    <meta property="og:url" content="{{ url_for('embed', id=id) }}">
+    <meta property="og:image" content="{{ url_for('thumb', id=id) }}">
     <meta property="og:image:type" content="{{mime}}">
     <meta property="og:image:width" content="{{width}}">
     <meta property="og:image:height" content={{height}}>
     <meta property="og:image:alt" content="{{description}}">
+    <link type="application/json+oembed" href="{{ url_for('oembed', id=id) }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{description}} - on Iamages">
     <meta name="twitter:description" content="{{description}}">
-    <meta name="twitter:image" content="{{ url_for(**{'name': 'thumb', 'id': id}) }}">
+    <meta name="twitter:image" content="{{ url_for('thumb', id=id) }}">
     <meta name="twitter:image:alt" content="{{description}}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#F1965B">
     <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
   </head>
   <body>
-    <section class="section">
-      <div class="container">
-        <figure class="image is-48x48">
-          <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}">
-        </figure>
-        <br>
-        <h2 class="title">{{description}}</h2>
-        <hr>
-        <img src="{{ url_for(**{'name': 'img', 'id': id}) }}" alt="We couldn't find the file you wanted :(">
-        <hr>
-        <p>
-          Served from Iamages, the open source image sharing platform.
-        </p>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('embed', id=id) }}">
+                <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
+              </a>
+              <a class="navbar-item" href="{{ url_for('embed', id=id) }}">
+                Embed Viewer&nbsp/&nbsp<b>{{description}}</b>
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container has-text-centered">
+          <div class="columns is-centered">
+            <div class="column is-half">
+              <img src="{{ url_for('img', id=id) }}" alt="We couldn't find the file you wanted :(">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-foot">
+        <section class="section">
+          <div class="container has-text-centered content">
+            <p>
+              By using this service, you agree to our <a href="{{ url_for('tos') }}" target="_blank">Terms of Service</a> and 
+              <a href="{{ url_for('privacy') }}" target="_blank">Privacy Policy</a>
+            </p>
+          </div>
+        </section>
       </div>
     </section>
   </body>
