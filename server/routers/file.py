@@ -196,7 +196,6 @@ def oembed(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
     return {
-        "author_name": file_information_parsed.description,
         "provider_name": "Iamages",
         "type": "photo"
     }
