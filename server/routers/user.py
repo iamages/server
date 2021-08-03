@@ -28,7 +28,9 @@ def shutdown_event():
     response_model=UserBase,
     description="Gets information for an user."
 )
-def info(username: str):
+def info(
+    username: str
+):
     user_information = r.table("users").get(username).run(conn)
     if not user_information:
         raise HTTPException(404)
@@ -72,7 +74,7 @@ def files(
 def search(
     username: str,
     user: Optional[UserBase] = Depends(auth_optional_dependency),
-    description: str = Form(...),
+    description: str = Form(..., min_length=1),
     limit: Optional[int] = Form(None, description="Limit search results."),
     start_date: Optional[datetime] = Form(None, description="Date to start searching from.")
 ):
@@ -98,8 +100,8 @@ def search(
     description="Creates a new user."
 )
 def new(
-    username: str = Form(...),
-    password: str = Form(...)
+    username: str = Form(..., min_length=1),
+    password: str = Form(..., min_length=1)
 ):
     if len(username) <= 2 or len(password) <= 4:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)

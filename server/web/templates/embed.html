@@ -1,4 +1,4 @@
-<html prefix="og: https://ogp.me/ns#">
+<html>
   <head>
     <meta name="robots" content="noindex">
     <title>{{description}} - on Iamages</title>
@@ -13,6 +13,8 @@
     <meta property="og:image:width" content="{{width}}">
     <meta property="og:image:height" content={{height}}>
     <meta property="og:image:alt" content="{{description}}">
+    <meta property="article:published_time" content="{{created}}">
+    <meta property="article:author" content={{owner}}>
     <link type="application/json+oembed" href="{{ url_for('oembed', id=id) }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{description}} - on Iamages">

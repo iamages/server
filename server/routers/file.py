@@ -176,7 +176,9 @@ def embed(
         "description": file_information_parsed.description,
         "mime": file_information_parsed.mime,
         "width": file_information_parsed.width,
-        "height": file_information_parsed.height
+        "height": file_information_parsed.height,
+        "created": file_information_parsed.created,
+        "owner": file_information_parsed.owner or "Anonymous"
     })
 
 @router.get(
@@ -185,6 +187,7 @@ def embed(
     description="Gets oEmbed metadata."
 )
 def oembed(
+    request: Request,
     id: UUID
 ):
     file_information = r.table("files").get(str(id)).run(conn)
@@ -196,8 +199,14 @@ def oembed(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
     return {
+        "version": "1.0",
+        "type": "photo",
         "provider_name": "Iamages",
-        "type": "photo"
+        "provider_url": request.url_for("embed", id=str(id)),
+        "url": request.url_for("thumb", id=str(id)),
+        "width": file_information_parsed.width,
+        "height": file_information_parsed.height,
+        "author_name": file_information_parsed.owner or "Anonymous"
     }
 
 @router.patch(
