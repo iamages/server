@@ -1,10 +1,9 @@
-<html prefix="og: http://ogp.me/ns#
-              article: https://ogp.me/ns/article"
->
+<html prefix="og: http://ogp.me/ns# article: https://ogp.me/ns/article">
   <head>
     <meta name="robots" content="noindex">
     <title>{{description}} - on Iamages</title>
     <meta name="description" content="{{description}}">
+    <meta name="author" content={{owner}}>
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Iamages">
     <meta property="og:title" content="Click to view full image on Iamages.">
@@ -33,7 +32,7 @@
                 <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
               </a>
               <a class="navbar-item" href="{{ url_for('embed', id=id) }}">
-                Embed Viewer&nbsp/&nbsp<b>{{description}}</b>
+                Embed Viewer
               </a>
             </div>
           </div>
@@ -41,9 +40,45 @@
       </div>
       <div class="hero-body">
         <div class="container has-text-centered">
-          <div class="columns is-centered">
+          <div class="columns is-centered is-variable is-1">
             <div class="column is-half">
               <img src="{{ url_for('img', id=id) }}" alt="We couldn't find the file you wanted :(">
+            </div>
+            <div class="column is-half">
+              <div class="table-container">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Description</th>
+                      <td>{{description}}</td>
+                    </tr>
+                    <tr>
+                      <th>NSFW</th>
+                      <td>{{nsfw}}</td>
+                    </tr>
+                    <tr>
+                      <th>Hidden</th>
+                      <td>{{hidden}}</td>
+                    </tr>
+                    <tr>
+                      <th>MIME type</th>
+                      <td>{{mime}}</td>
+                    </tr>
+                    <tr>
+                      <th>Dimensions</th>
+                      <td>{{width}}x{{height}}</td>
+                    </tr>
+                    <tr>
+                      <th>Created date</th>
+                      <td>{{created}}</td>
+                    </tr>
+                    <tr>
+                      <th>Owner</th>
+                      <td>{{owner}}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

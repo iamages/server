@@ -172,12 +172,14 @@ def embed(
 
     return templates.TemplateResponse("embed.html", {
         "request": request,
-        "id": str(id),
+        "id": id,
         "description": file_information_parsed.description,
+        "nsfw": file_information_parsed.nsfw,
+        "hidden": file_information_parsed.hidden,
         "mime": file_information_parsed.mime,
         "width": file_information_parsed.width,
         "height": file_information_parsed.height,
-        "created": str(file_information_parsed.created),
+        "created": file_information_parsed.created,
         "owner": file_information_parsed.owner or "Anonymous"
     })
 
