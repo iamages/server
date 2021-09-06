@@ -222,7 +222,8 @@ def modify(
             "hidden": handle_str2bool(data)
         })
 
-    update_query.run(conn)
+    with get_conn() as conn:
+        update_query.run(conn)
 
 @router.delete(
     "/{id}/delete",
@@ -249,7 +250,8 @@ def delete(
     if thumb_file.exists(): 
         thumb_file.unlink()
 
-    r.table("files").get(str(id)).delete().run(conn)
+    with get_conn() as conn:
+        r.table("files").get(str(id)).delete().run(conn)
 
 @router.post(
     "/{id}/duplicate",
