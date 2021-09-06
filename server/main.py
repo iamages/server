@@ -5,8 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 
 from .routers import everyone, file, user
+
+Image.MAX_IMAGE_PIXELS = None
 
 tags_metadata = [
     {

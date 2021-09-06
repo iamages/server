@@ -55,13 +55,13 @@
             to protect your privacy while using the Service.
             <br><br>
             If you want to request a copy of your data, or delete the data from our systems,
-            {% if name and contact %}
+            {% if owner.name and owner.contact %}
               we request that you provide the following Collected Data:
               <ul>
                 <li>User name</li>
                 <li>User password</li>
               </ul>
-              via <a class="button is-danger" href="{{contact}}">contact {{name}}</a> as well as your intentions. We shall help you 
+              via <a class="button is-danger" href="{{owner.contact}}">contact {{owner.name}}</a> as well as your intentions. We shall help you 
               with your request as soon as possible.
             {% else %}
               please contact the server owner directly (no server owner information provided to server).

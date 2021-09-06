@@ -1,1 +1,1 @@
-MAX_SIZE=52428800 STORAGE_DIR=~/Documents/Projects/Iamages/server/iamages_storage gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind '0.0.0.0:8000' --forwarded-allow-ips '*' --access-logfile '-' --access-logformat '%(r)s %(s)s' --preload server.main:app
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind '0.0.0.0:8000' --forwarded-allow-ips '*' --access-logfile '-' --access-logformat '%(r)s %(s)s' server.main:app

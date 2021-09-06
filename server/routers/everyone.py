@@ -13,8 +13,11 @@ from fastapi.responses import HTMLResponse
 from PIL import Image
 from pydantic import AnyHttpUrl
 
-from ..common import (FILES_PATH, auth_optional_dependency, conn, r,
-                      server_config, templates)
+from ..common.auth import auth_optional_dependency
+from ..common.config import server_config
+from ..common.db import get_conn, r
+from ..common.paths import FILES_PATH
+from ..common.templates import templates
 from ..modals.file import FileBase
 from ..modals.user import UserBase
 
@@ -37,19 +40,16 @@ router = APIRouter(
     tags=["everyone"]
 )
 
-@router.on_event("shutdown")
-def shutdown_event():
-    conn.close()
-
 @router.get(
     "/latest",
     response_model=List[FileBase],
     description="Gets the latest 10 publicly uploaded files."
 )
 def latest():
-    return r.table("files").filter(
-        (~r.row["private"]) & (~r.row["hidden"])
-    ).order_by(r.desc("created")).limit(10).run(conn)
+    with get_conn() as conn:
+        return r.table("files").filter(
+            (~r.row["private"]) & (~r.row["hidden"])
+        ).order_by(r.desc("created")).limit(10).run(conn)
 
 @router.get(
     "/random",
@@ -63,7 +63,8 @@ def random(
     if not nsfw:
         filters = filters & (~r.row["nsfw"])
 
-    file_information = r.table("files").filter(filters).sample(1).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").filter(filters).sample(1).run(conn)
 
     if not file_information or file_information[0] == []:
         raise HTTPException(503)
@@ -91,7 +92,8 @@ def search(
     if limit:
         query = query.limit(limit)
 
-    return query.run(conn)
+    with get_conn() as conn:
+        return query.run(conn)
 
 @router.post(
     "/upload",
@@ -107,13 +109,13 @@ def upload(
     upload_file: UploadFile = File(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    if not upload_file.content_type in server_config.accept_mimes:
+    if not upload_file.content_type in server_config.iamages_accept_mimes:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
     real_file_size = 0
     for chunk in upload_file.file:
         real_file_size += len(chunk)
-        if real_file_size > server_config.max_size:
+        if real_file_size > server_config.iamages_max_size:
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
     new_file_name: str = uuid4().hex + guess_extension(upload_file.content_type)
@@ -143,12 +145,13 @@ def upload(
         new_file_path.unlink()
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 
-    try:
-        r.table("files").insert(file_information).run(conn)
-    except:
-        print_exc()
-        new_file_path.unlink()
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    with get_conn() as conn:
+        try:
+            r.table("files").insert(file_information).run(conn)
+        except:
+            print_exc()
+            new_file_path.unlink()
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
@@ -175,18 +178,18 @@ def websave(
         with urlopen(upload_url) as fsrc, TemporaryFile() as fdst:
             file_mime = fsrc.headers["Content-Type"]
 
-            if not file_mime in server_config.accept_mimes:
+            if not file_mime in server_config.iamages_accept_mimes:
                 raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
             new_file_name = uuid4().hex + guess_extension(file_mime)
-            new_file_path = Path(server_config.storage_dir, "files", new_file_name)
+            new_file_path = Path(FILES_PATH, new_file_name)
             if new_file_path.exists():
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             real_file_size = 0
             for chunk in fsrc:
                 real_file_size += len(chunk)
-                if real_file_size > server_config.max_size:
+                if real_file_size > server_config.iamages_max_size:
                     raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
                 fdst.write(chunk)
 
@@ -216,12 +219,13 @@ def websave(
         new_file_path.unlink()
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 
-    try:
-        r.table("files").insert(file_information).run(conn)
-    except:
-        print_exc()
-        new_file_path.unlink()
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    with get_conn() as conn:
+        try:
+            r.table("files").insert(file_information).run(conn)
+        except:
+            print_exc()
+            new_file_path.unlink()
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
@@ -235,8 +239,8 @@ async def tos(request: Request):
     return templates.TemplateResponse("tos.html", {
         "request": request,
         "owner": {
-            "name": server_config.server_owner,
-            "contact": server_config.server_contact
+            "name": server_config.iamages_server_owner,
+            "contact": server_config.iamages_server_contact
         }
     })
 
@@ -250,7 +254,7 @@ async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {
         "request": request,
         "owner": {
-            "name": server_config.server_owner,
-            "contact": server_config.server_contact
+            "name": server_config.iamages_server_owner,
+            "contact": server_config.iamages_server_contact
         }
     })

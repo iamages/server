@@ -5,8 +5,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, status
 
-from ..common import (FILES_PATH, THUMBS_PATH, auth_optional_dependency,
-                      auth_required_dependency, conn, pwd_context, r)
+from ..common.auth import (auth_optional_dependency, auth_required_dependency,
+                           pwd_context)
+from ..common.db import get_conn, r
+from ..common.paths import FILES_PATH, THUMBS_PATH
 from ..modals.file import FileBase, FileInDB
 from ..modals.user import UserBase, UserInDB
 
@@ -14,14 +16,14 @@ from ..modals.user import UserBase, UserInDB
 class UserModifiableFields(str, Enum):
     password: str = "password"
 
+def check_user_exists(username: str):
+    with get_conn() as conn:
+        return r.table("users").get_all(username).count().eq(1).run(conn)
+
 router = APIRouter(
     prefix="/user",
     tags=["user"]
 )
-
-@router.on_event("shutdown")
-def shutdown_event():
-    conn.close()
 
 @router.get(
     "/{username}/info",
@@ -31,7 +33,8 @@ def shutdown_event():
 def info(
     username: str
 ):
-    user_information = r.table("users").get(username).run(conn)
+    with get_conn() as conn:
+        user_information = r.table("users").get(username).run(conn)
     if not user_information:
         raise HTTPException(404)
 
@@ -48,7 +51,7 @@ def files(
     limit: Optional[int] = Form(None, description="Limit file results."),
     start_date: Optional[datetime] = Form(None, description="Date to start returning results from.")
 ):
-    if not r.table("users").get(username).run(conn):
+    if not check_user_exists(username):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     filters = r.row["owner"] == username
@@ -64,7 +67,8 @@ def files(
     if limit:
         query = query.limit(limit)
 
-    return query.run(conn)
+    with get_conn() as conn:
+        return query.run(conn)
 
 @router.post(
     "/{username}/files/search",
@@ -92,7 +96,8 @@ def search(
     if limit:
         query = query.limit(limit)
 
-    return query.run(conn)
+    with get_conn() as conn:
+        return query.run(conn)
 
 @router.post(
     "/new",
@@ -106,16 +111,17 @@ def new(
     if len(username) <= 2 or len(password) <= 4:
         raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-    if r.table("users").get(username).run(conn):
+    if check_user_exists(username):
         raise HTTPException(status.HTTP_409_CONFLICT)
 
     user_information_parsed = UserInDB(
         username=username,
-        password=password,
+        password=pwd_context.hash(password),
         created=datetime.now(timezone.utc)
     )
 
-    r.table("users").insert(user_information_parsed.dict()).run(conn)
+    with get_conn() as conn:
+        r.table("users").insert(user_information_parsed.dict()).run(conn)
 
     return user_information_parsed.dict()
 
@@ -136,21 +142,23 @@ def modify(
             "password": pwd_context.hash(data)
         })
 
-    update_query.run(conn)
+    with get_conn() as conn:
+        update_query.run(conn)
     
 @router.delete(
     "/delete",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Deletes an user.")
 def delete(user: UserBase = Depends(auth_required_dependency)):
-    for file_information in r.table("files").filter(r.row["owner"] == user.username).run(conn):
-        file_information_parsed = FileInDB(**file_information)
-        img_file = Path(FILES_PATH, file_information_parsed.file)
-        thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
-        if img_file.exists():
-            img_file.unlink()
-        if thumb_file.exists():
-            thumb_file.unlink()
-        r.table("files").get(str(file_information_parsed.id)).delete().run(conn)
+    with get_conn() as conn:
+        for file_information in r.table("files").filter(r.row["owner"] == user.username).run(conn):
+            file_information_parsed = FileInDB(**file_information)
+            img_file = Path(FILES_PATH, file_information_parsed.file)
+            thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
+            if img_file.exists():
+                img_file.unlink()
+            if thumb_file.exists():
+                thumb_file.unlink()
+            r.table("files").get(str(file_information_parsed.id)).delete().run(conn)
 
-    r.table("users").get(user.username).delete().run(conn)
+        r.table("users").get(user.username).delete().run(conn)

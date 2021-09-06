@@ -14,9 +14,11 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, Form, HTTPException,
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from PIL import Image
 
-from ..common import (FILES_PATH, THUMBS_PATH, auth_optional_dependency,
-                      auth_required_dependency, compare_owner, conn, r,
-                      server_config, templates)
+from ..common.auth import (auth_optional_dependency, auth_required_dependency,
+                           compare_owner)
+from ..common.db import get_conn, r
+from ..common.paths import FILES_PATH, THUMBS_PATH
+from ..common.templates import templates
 from ..modals.file import FileBase, FileInDB
 from ..modals.user import UserBase
 
@@ -28,11 +30,11 @@ class FileModifiableFields(str, Enum):
     hidden = "hidden"
 
 def create_thumb(img_filename: Path, mime: str):
-    img_path = Path(server_config.storage_dir, "files", img_filename)
+    img_path = Path(FILES_PATH, img_filename)
     if not img_path.exists():
         return
 
-    thumb_path = Path(server_config.storage_dir, "thumbs", img_filename)
+    thumb_path = Path(THUMBS_PATH, img_filename)
 
     with NamedTemporaryFile(suffix=img_filename.suffix) as temp:
         with Image.open(img_path) as img:
@@ -44,7 +46,7 @@ def create_thumb(img_filename: Path, mime: str):
                 img.save(temp)
 
         if fstat(temp.fileno()).st_size > img_path.stat().st_size:
-            copyfile(img_path, thumb_path)
+            thumb_path.symlink_to(img_path)
             return
 
         copyfile(temp.name, thumb_path)
@@ -62,10 +64,6 @@ router = APIRouter(
     tags=["file"]
 )
 
-@router.on_event("shutdown")
-def shutdown_event():
-    conn.close()
-
 @router.get(
     "/{id}/info",
     response_model=FileBase,
@@ -75,7 +73,8 @@ def info(
     id: UUID,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -99,7 +98,8 @@ def img(
     id: UUID,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -128,7 +128,8 @@ def thumb(
     background_tasks: BackgroundTasks,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -162,7 +163,8 @@ def embed(
     request: Request,
     id: UUID
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -192,7 +194,8 @@ def modify(
     data: Union[bool, str] = Form(..., min_length=1, max_length=50, description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -230,7 +233,8 @@ def delete(
     id: UUID,
     user: UserBase = Depends(auth_required_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -257,7 +261,8 @@ def duplicate(
     id: UUID,
     user: UserBase = Depends(auth_required_dependency)
 ):
-    file_information = r.table("files").get(str(id)).run(conn)
+    with get_conn() as conn:
+        file_information = r.table("files").get(str(id)).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     file_information_parsed = FileInDB.parse_obj(file_information)
@@ -285,15 +290,16 @@ def duplicate(
         "owner": user.username
     }
 
-    img_file = Path(server_config.storage_dir, "files", file_information_parsed.file)
-    duplicated_img_file = Path(server_config.storage_dir, "files", duplicated_file_name)
+    img_file = Path(FILES_PATH, file_information_parsed.file)
+    duplicated_img_file = Path(FILES_PATH, duplicated_file_name)
     copyfile(img_file, duplicated_img_file)
 
-    try:
-        r.table("files").insert(duplicated_file_information).run(conn)
-    except:
-        print_exc()
-        duplicated_img_file.unlink()
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    with get_conn() as conn:
+        try:
+            r.table("files").insert(duplicated_file_information).run(conn)
+        except:
+            print_exc()
+            duplicated_img_file.unlink()
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return duplicated_file_information

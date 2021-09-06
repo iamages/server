@@ -1,4 +1,4 @@
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __copyright__ = "© jkelol111 et al 2021-present"
 
 from rethinkdb import RethinkDB

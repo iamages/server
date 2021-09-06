@@ -33,18 +33,17 @@
             <br><br>
             We deny serving any 'illegal' Content (Illegal Content), such as, but not limited to:
             <ul>
-              <li>Overly sexual content (especially those involving minors)</li>
-              <li>Overly violent content</li>
+              <li>CSAM (content depicting minors in sexual form)</li>
               <li>Promotes illegal activities</li>
             </ul>
             Moreover, other Content prohibited by our hosting provider (Illegal Content), Uberspace is not allowed on our Service.
             To know more, please refer to their <a href="https://uberspace.de/en/about/houserules/">house rules</a>.
             <br>
             If any such Illegal Content is to be found on our systems, please report it 
-            {% if name and contact %}
-              to
+            {% if owner.name and owner.contact %}
+              using
               <br>
-              <a class="button is-danger" href="{{contact}}">contact {{name}}</a>
+              <a class="button is-danger" href="{{owner.contact}}">contact {{owner.name}}</a>
             {% else %}
               directly to the server owner (no server owner information provided to server).
             {% endif %}

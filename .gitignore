@@ -1,5 +1,6 @@
 iamages_storage
 iamages_replicated
+test_storage
 __pycache__
 .vscode
 .DS_Store
