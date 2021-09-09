@@ -1,3 +1,6 @@
+__version__ = "3.1.0"
+__copyright__ = "© jkelol111 et al 2021-present"
+
 import subprocess
 from argparse import ArgumentParser
 from datetime import datetime, timezone
@@ -11,12 +14,11 @@ from pydantic import BaseSettings, DirectoryPath
 
 from common import server_config
 
-SUPPORTED_ARCHIVE_DIR = 3
-
+SUPPORTED_STORAGE_VER = 3
+SUPPORTED_ARCHIVE_VER = 3
 
 class ArchiveConfig(BaseSettings):
-    archive_dir: DirectoryPath
-    archive_ver: int = SUPPORTED_ARCHIVE_DIR
+    iamages_archive_dir: DirectoryPath
 
 archive_config = ArchiveConfig()
 
@@ -48,27 +50,33 @@ if arg_parsed.command == "list":
         print(f"    + Hash file: {hash_file}")
 elif arg_parsed.command == "archive":
     with TemporaryDirectory() as temp_dir:
+        # FIXME: Use this when dump command from RethinkDB is fixed.
+        # subprocess.run([
+        #     "rethinkdb",
+        #     "dump",
+        #     "--connect", f"{server_config.db_host}:{server_config.db_port}",
+        #     "--export", "iamages",
+        #     "--file", str(Path(temp_dir).with_suffix("db.tar.gz"))
+        # ])
         subprocess.run([
-            "rethinkdb",
-            "dump",
-            "--connect", f"{server_config.db_host}:{server_config.db_port}",
+            "rethinkdb-dump",
             "--export", "iamages",
-            "--file", str(Path(temp_dir).with_suffix("db.tar.gz"))
+            "--file", str(Path(temp_dir, "db.tar.gz"))
         ])
 
-        copytree(server_config.storage_dir, temp_dir, dirs_exist_ok=True)
+        copytree(server_config.iamages_storage_dir, temp_dir, dirs_exist_ok=True)
 
         created_time = datetime.now(timezone.utc)
 
-        with (Path(temp_dir) / Path("meta.json")).open("wb") as meta_file:
+        with (Path(temp_dir, "meta.json")).open("wb") as meta_file:
             meta_file.write(orjson.dumps({
-                "version": archive_config.archive_ver,
+                "version": SUPPORTED_ARCHIVE_VER,
                 "created": created_time
             }))
 
         archive_basename = f"iamages-{created_time.strftime('%d%m%Y%H%M')}.iamagesbak"
 
-        archive_path = archive_config.archive_dir / Path(archive_basename)
+        archive_path = archive_config.iamages_archive_dir / Path(archive_basename)
 
         make_archive(archive_path, "zip", temp_dir)
 
