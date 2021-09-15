@@ -1,11 +1,14 @@
+__version__ = "3.1.0"
+__copyright__ = "© jkelol111 et al 2021-present"
+
 from argparse import ArgumentParser
 from getpass import getpass
 from pathlib import Path
 from pprint import pprint
 
-from rethinkdb import RethinkDB
-
-from common import server_config
+from common.config import server_config
+from common.db import get_conn, r
+from common.paths import FILES_PATH, THUMBS_PATH
 
 arg_parser = ArgumentParser(description="Manage the Iamages database.")
 arg_parser.add_argument(
@@ -22,36 +25,36 @@ arg_parser.add_argument(
 
 arg_parsed = arg_parser.parse_args()
 
-r = RethinkDB()
-conn = r.connect(
-    host=server_config.db_host,
-    port=server_config.db_port,
-    user="admin",
-    password=getpass("Enter admin password: "),
-    db="iamages"
-)
+conn = get_conn(server_config.iamages_db_user, server_config.iamages_db_pwd, "iamages")
 
 if arg_parsed.command == "chupwd":
-    new_password = getpass("Enter a new password for the Iamages database: ")
+    new_password = getpass(f"Enter a new password for {server_config.iamages_db_user}: ")
     new_password_confirm = getpass("Enter the new password again: ")
     if new_password != new_password_confirm:
         raise Exception("Password mismatch!")
-    r.db("rethinkdb").table("users").get(server_config.db_user).update({
+    r.db("rethinkdb").table("users").get(server_config.iamages_db_user).update({
         "password": new_password
     }).run(conn)
-    print(f"Changed the password for database user '{server_config.db_user}'.")
+    print(f"Changed the password for database user '{server_config.iamages_db_user}'.")
 elif arg_parsed.command == "getfile":
     pprint(r.table("files").get(arg_parsed.data).run(conn))
 elif arg_parsed.command == "getuser":
     pprint(r.table("users").get(arg_parsed.data).run(conn))
+elif arg_parsed.command == "getcollection":
+    pprint(r.table("collections").get(arg_parsed.data).run(conn))
 elif arg_parsed.command == "deletefile":
-    file_information = r.table("files").get(arg_parsed.data).run(conn)
+    query = r.table("files").get(arg_parsed.data)
+    file_information = query.run(conn)
     if not file_information:
         print("File doesn't exist!")
         exit(1)
-    Path(server_config.storage_dir, "files", file_information["file"]).unlink()
-    Path(server_config.storage_dir, "thumbs", file_information["file"]).unlink()
-    r.table("files").get(arg_parsed.data).delete().run(conn)
+    file = Path(FILES_PATH, file_information["file"])
+    if file.exists():
+        file.unlink()
+    thumb = Path(THUMBS_PATH, file_information["file"])
+    if thumb.exists():
+        thumb.unlink()
+    query.delete().run(conn)
 else:
     print("Command doesn't exist!")
 

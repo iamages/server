@@ -1,14 +1,15 @@
 import secrets
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from passlib.context import CryptContext
 
-from .db import get_conn, r
+from ..modals.collection import CollectionInDB
 from ..modals.file import FileInDB
 from ..modals.user import UserBase, UserInDB
+from .db import get_conn, r
 
 auth_required = HTTPBasic()
 auth_optional = HTTPBasic(auto_error=False)
@@ -47,7 +48,7 @@ def auth_optional_dependency(credentials: Optional[HTTPBasicCredentials] = Depen
     if credentials:
         return process_basic_auth(credentials)
 
-def compare_owner(file_information_parsed: Optional[FileInDB], user_information_parsed: Optional[UserBase]):
-    if file_information_parsed.owner and user_information_parsed and secrets.compare_digest(file_information_parsed.owner, user_information_parsed.username):
+def compare_owner(file_or_collection_information_parsed: Optional[Union[FileInDB, CollectionInDB]], user_information_parsed: Optional[UserBase]):
+    if file_or_collection_information_parsed.owner and user_information_parsed and secrets.compare_digest(file_or_collection_information_parsed.owner, user_information_parsed.username):
         return True
     return False

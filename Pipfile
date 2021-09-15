@@ -11,12 +11,12 @@ rethinkdb = "*"
 tqdm = "*"
 pillow = "*"
 aiofiles = "*"
-ujson = "*"
 orjson = "*"
 passlib = {extras = ["argon2", "bcrypt"], version = "*"}
 python-multipart = "*"
 jinja2 = "*"
 setproctitle = "*"
+shortuuid = "*"
 
 [dev-packages]
 pyinstaller = "*"

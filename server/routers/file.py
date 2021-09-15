@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from distutils.util import strtobool
 from enum import Enum
 from os import fstat
 from pathlib import Path
@@ -7,9 +6,9 @@ from shutil import copyfile
 from tempfile import NamedTemporaryFile
 from traceback import print_exc
 from typing import Optional, Union
-from uuid import UUID, uuid4
 
-from fastapi import (APIRouter, BackgroundTasks, Depends, Form, HTTPException,
+import shortuuid
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
                      Request, status)
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from PIL import Image
@@ -19,15 +18,10 @@ from ..common.auth import (auth_optional_dependency, auth_required_dependency,
 from ..common.db import get_conn, r
 from ..common.paths import FILES_PATH, THUMBS_PATH
 from ..common.templates import templates
+from ..common.utils import handle_str2bool
 from ..modals.file import FileBase, FileInDB
 from ..modals.user import UserBase
 
-
-class FileModifiableFields(str, Enum):
-    description = "description"
-    nsfw = "nsfw"
-    private = "private"
-    hidden = "hidden"
 
 def create_thumb(img_filename: Path, mime: str):
     img_path = Path(FILES_PATH, img_filename)
@@ -51,14 +45,6 @@ def create_thumb(img_filename: Path, mime: str):
 
         copyfile(temp.name, thumb_path)
 
-def handle_str2bool(boolstr):
-    if isinstance(boolstr, bool):
-        return boolstr
-    try:
-        return bool(strtobool(boolstr))
-    except ValueError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST)
-
 router = APIRouter(
     prefix="/file",
     tags=["file"]
@@ -70,17 +56,16 @@ router = APIRouter(
     description="Gets information for a file."
 )
 def info(
-    id: UUID,
+    id: str,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
+        file_information = r.table("files").get(id).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     file_information_parsed = FileInDB.parse_obj(file_information)
     if not file_information_parsed.private:
-        file_information_parsed.owner = None
         return file_information
     
     if not compare_owner(file_information_parsed, user):
@@ -95,11 +80,11 @@ def info(
     description="Gets image for a file."
 )
 def img(
-    id: UUID,
+    id: str,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
+        file_information = r.table("files").get(id).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -124,12 +109,12 @@ def img(
     description="Gets thumbnail for a file."
 )
 def thumb(
-    id: UUID,
+    id: str,
     background_tasks: BackgroundTasks,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
+        file_information = r.table("files").get(id).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -161,10 +146,10 @@ def thumb(
 )
 def embed(
     request: Request,
-    id: UUID
+    id: str
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
+        file_information = r.table("files").get(id).run(conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -172,7 +157,7 @@ def embed(
     if file_information_parsed.private:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-    return templates.TemplateResponse("embed.html", {
+    return templates.TemplateResponse("embed_file.html", {
         "request": request,
         "id": id,
         "description": file_information_parsed.description,
@@ -183,47 +168,53 @@ def embed(
         "owner": file_information_parsed.owner or "Anonymous"
     })
 
+
+class FileModifiableFields(str, Enum):
+    description = "description"
+    nsfw = "nsfw"
+    private = "private"
+    hidden = "hidden"
+
 @router.patch(
     "/{id}/modify",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Modifies a file."
 )
 def modify(
-    id: UUID,
-    field: FileModifiableFields = Form(..., description="Data field to modify for the file."),
-    data: Union[bool, str] = Form(..., min_length=1, max_length=50, description="Data given to the `field`."),
+    id: str,
+    field: FileModifiableFields = Body(..., description="Data field to modify for the file."),
+    data: Union[bool, str] = Body(..., description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
-    if not file_information:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
+        query = r.table("files").get(id)
 
-    file_information_parsed = FileInDB.parse_obj(file_information)
-    if not compare_owner(file_information_parsed, user):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+        file_information = query.run(conn)
+        if not file_information:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-    update_query = r.table("files").get(str(id))
-    
-    if field == FileModifiableFields.description:
-        update_query = update_query.update({
-            "description": str(data)
-        })
-    elif field == FileModifiableFields.nsfw:
-        update_query = update_query.update({
-            "nsfw": handle_str2bool(data)
-        })
-    elif field == FileModifiableFields.private:
-        update_query = update_query.update({
-            "private": handle_str2bool(data)
-        })
-    elif field == FileModifiableFields.hidden:
-        update_query = update_query.update({
-            "hidden": handle_str2bool(data)
-        })
+        file_information_parsed = FileInDB.parse_obj(file_information)
+        if not compare_owner(file_information_parsed, user):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+        
+        if field == FileModifiableFields.description:
+            query = query.update({
+                "description": str(data)
+            })
+        elif field == FileModifiableFields.nsfw:
+            query = query.update({
+                "nsfw": handle_str2bool(data)
+            })
+        elif field == FileModifiableFields.private:
+            query = query.update({
+                "private": handle_str2bool(data)
+            })
+        elif field == FileModifiableFields.hidden:
+            query = query.update({
+                "hidden": handle_str2bool(data)
+            })
 
-    with get_conn() as conn:
-        update_query.run(conn)
+        query.run(conn)
 
 @router.delete(
     "/{id}/delete",
@@ -231,27 +222,26 @@ def modify(
     description="Deletes a file."
 )
 def delete(
-    id: UUID,
+    id: str,
     user: UserBase = Depends(auth_required_dependency)
 ):
     with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
-    if not file_information:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
+        file_information = r.table("files").get(id).run(conn)
+        if not file_information:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-    file_information_parsed = FileInDB.parse_obj(file_information)
-    if not compare_owner(file_information_parsed, user):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+        file_information_parsed = FileInDB.parse_obj(file_information)
+        if not compare_owner(file_information_parsed, user):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-    img_file = Path(FILES_PATH, file_information_parsed.file)
-    thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
-    if img_file.exists():
-        img_file.unlink()
-    if thumb_file.exists(): 
-        thumb_file.unlink()
+        img_file = Path(FILES_PATH, file_information_parsed.file)
+        thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
+        if img_file.exists():
+            img_file.unlink()
+        if thumb_file.exists(): 
+            thumb_file.unlink()
 
-    with get_conn() as conn:
-        r.table("files").get(str(id)).delete().run(conn)
+        r.table("files").get(id).delete().run(conn)
 
 @router.post(
     "/{id}/duplicate",
@@ -260,43 +250,40 @@ def delete(
     description="Duplicates a file into an account."
 )
 def duplicate(
-    id: UUID,
+    id: str,
     user: UserBase = Depends(auth_required_dependency)
 ):
     with get_conn() as conn:
         file_information = r.table("files").get(str(id)).run(conn)
-    if not file_information:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-    file_information_parsed = FileInDB.parse_obj(file_information)
+        if not file_information:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        file_information_parsed = FileInDB.parse_obj(file_information)
 
-    if file_information_parsed.private and not compare_owner(file_information_parsed, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN)
+        if file_information_parsed.private and not compare_owner(file_information_parsed, user):
+            raise HTTPException(status.HTTP_403_FORBIDDEN)
 
-    duplicated_file_name = uuid4().hex + file_information_parsed.file.suffix
+        duplicated_file_name = shortuuid.uuid() + file_information_parsed.file.suffix
 
-    duplicated_file_information = {
-        "id": str(uuid4()),
-    }
+        duplicated_file_information_parsed = FileInDB(
+            id=shortuuid.uuid(),
+            description = file_information_parsed.description,
+            nsfw=file_information_parsed.nsfw,
+            private=True,
+            hidden=True,
+            created=datetime.now(timezone.utc),
+            mime=file_information_parsed.mime,
+            width=file_information_parsed.width,
+            height=file_information_parsed.height,
+            file=duplicated_file_name,
+            owner=user.username
+        )
 
-    duplicated_file_information = {
-        "id": str(uuid4()),
-        "description": file_information_parsed.description,
-        "nsfw": file_information_parsed.nsfw,
-        "private": True,
-        "hidden": True,
-        "created": datetime.now(timezone.utc).replace(microsecond=0),
-        "mime": file_information_parsed.mime,
-        "width": file_information_parsed.width,
-        "height": file_information_parsed.height,
-        "file": duplicated_file_name,
-        "owner": user.username
-    }
+        duplicated_file_information = duplicated_file_information_parsed.dict(exclude_unset=True)
 
-    img_file = Path(FILES_PATH, file_information_parsed.file)
-    duplicated_img_file = Path(FILES_PATH, duplicated_file_name)
-    copyfile(img_file, duplicated_img_file)
+        img_file = Path(FILES_PATH, file_information_parsed.file)
+        duplicated_img_file = Path(FILES_PATH, duplicated_file_name)
+        copyfile(img_file, duplicated_img_file)
 
-    with get_conn() as conn:
         try:
             r.table("files").insert(duplicated_file_information).run(conn)
         except:
@@ -304,4 +291,4 @@ def duplicate(
             duplicated_img_file.unlink()
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return duplicated_file_information
+        return duplicated_file_information
