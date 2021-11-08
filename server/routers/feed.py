@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Body, HTTPException, Query, status
 
 from ..common.db import get_conn, r
 from ..modals.file import FileBase
@@ -8,16 +11,39 @@ router = APIRouter(
     tags=["feed"]
 )
 
-@router.get(
+@router.post(
     "/latest",
     response_model=list[FileBase],
     description="Gets the latest 10 publicly uploaded files."
 )
-def latest():
+def latest(
+    limit: int = Body(..., ge=1, description="Limit file results."),
+    start_date: Optional[datetime] = Body(None, description="Date to start returning results from.")
+):
     with get_conn() as conn:
-        return r.table("files").filter(
+        filters = (~r.row["private"]) & (~r.row["hidden"])
+        if start_date:
+            filters = filters & (r.row["created"] < start_date)
+        return r.table("files").filter(filters).order_by(r.desc("created")).limit(limit).run(conn)
+
+@router.post(
+    "/popular",
+    response_model=list[FileBase],
+    description="Get the most popular publicly uploaded files."
+)
+def popular(
+    limit: int = Body(..., ge=1, description="Limit file results."),
+    start_id: Optional[str] = Body(None, description="File ID to start returning results from.")
+):
+    with get_conn() as conn:
+        query = r.table("files").filter(
             (~r.row["private"]) & (~r.row["hidden"])
-        ).order_by(r.desc("created")).limit(10).run(conn)
+        ).order_by(r.desc("views"))
+
+        if start_id:
+            query = query.slice(start_id)
+
+        return query.limit(limit).run(conn)
 
 @router.get(
     "/random",

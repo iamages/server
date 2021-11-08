@@ -1,14 +1,21 @@
+from contextlib import contextmanager
+
 from rethinkdb import RethinkDB
 
 from .config import server_config
 
 r = RethinkDB()
 
-def get_conn(user: str, pwd: str, db: str):
-    return r.connect(
+@contextmanager
+def get_conn():
+    conn = r.connect(
         host=server_config.iamages_db_host,
         port=server_config.iamages_db_port,
-        user=user,
-        password=pwd,
-        db=db
+        user=server_config.iamages_db_user,
+        password=server_config.iamages_db_pwd,
+        db="iamages"
     )
+    try:
+        yield conn
+    finally:
+        conn.close()

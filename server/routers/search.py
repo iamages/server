@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, Query
 
 from ..common.auth import auth_optional_dependency
 from ..common.db import get_conn, r
-from ..modals.collection import CollectionBase
+from ..modals.collection import Collection
 from ..modals.file import FileBase
 from ..modals.user import UserBase
 
@@ -21,7 +21,7 @@ router = APIRouter(
 )
 def search_files(
     description: str = Body(..., description="Description to search for."),
-    limit: Optional[int] = Body(None, description="Limit search results."),
+    limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from."),
     username: Optional[str] = Query(None, description="Username to search files in."),
     user: Optional[UserBase] = Depends(auth_optional_dependency),
@@ -47,12 +47,12 @@ def search_files(
 
 @router.post(
     "/collections",
-    response_model=list[CollectionBase],
+    response_model=list[Collection],
     description="Searches for collections."
 )
 def search_collections(
     description: str = Body(..., description="Description to search for."),
-    limit: Optional[int] = Body(None, description="Limit search results."),
+    limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from."),
     username: Optional[str] = Query(None, description="Username to search files in."),
     user: Optional[UserBase] = Depends(auth_optional_dependency),
@@ -83,7 +83,7 @@ def search_collections(
 )
 def search_users(
     username: str = Body(..., description="Username to search for."),
-    limit: Optional[int] = Body(None, description="Limit search results."),
+    limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from.")
 ):
     query = r.table("users")

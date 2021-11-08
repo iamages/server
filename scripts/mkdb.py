@@ -36,7 +36,7 @@ r.db("iamages").grant(server_config.iamages_db_user, {
 
 print("- Creating tables in database.")
 r.table_create("files").run(conn)
-# r.table_create("collections").run(conn)
+r.table_create("collections").run(conn)
 r.table_create("users", primary_key="username").run(conn)
 r.table_create("internal", primary_key="version").run(conn)
 
