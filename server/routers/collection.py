@@ -15,7 +15,7 @@ from ..common.paths import FILES_PATH, THUMBS_PATH
 from ..common.templates import templates
 from ..common.utils import handle_str2bool
 from ..modals.collection import Collection
-from ..modals.file import FileBase, FileInDB, FilesInDB
+from ..modals.file import FileBase, FileInDB
 from ..modals.user import UserBase
 
 router = APIRouter(
@@ -26,6 +26,7 @@ router = APIRouter(
 @router.post(
     "/new",
     response_model=Collection,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Creates a new collection."
 )
@@ -75,6 +76,7 @@ def new(
 @router.get(
     "/{id}/info",
     response_model=Collection,
+    response_model_exclude_unset=True,
     description="Gets information about a collection."
 )
 def info(
@@ -98,6 +100,7 @@ def info(
 @router.post(
     "/{id}/files",
     response_model=list[FileBase],
+    response_model_exclude_unset=True,
     description="Gets the files in a collection."
 )
 def files(
@@ -122,7 +125,13 @@ def files(
             if limit:
                 query = query.limit(limit)
 
-            return [file for file in FilesInDB.parse_obj(query.run(conn)).__root__ if not file.private or compare_owner(file, user)]
+            accepted_files = []
+            for file_information in query.run(conn):
+                file_information_parsed = FileBase.parse_obj(file_information)
+                if not file_information_parsed.private or compare_owner(file_information_parsed, user):
+                    accepted_files.append(file_information_parsed)
+
+            return accepted_files
         else:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
@@ -240,7 +249,10 @@ def embed(
         if collection_information_parsed.private:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-        files = FilesInDB.parse_obj(r.table("files").filter((r.row["collection"] == id) & ~r.row["private"]).order_by(r.desc("created")).run(conn))
+        files_parsed = []
+        files = r.table("files").filter((r.row["collection"] == id) & ~r.row["private"]).order_by(r.desc("created")).run(conn)
+        for file in files:
+            files_parsed.append(FileBase.parse_obj(file))
 
         return templates.TemplateResponse("embed_collection.html", {
             "request": request,

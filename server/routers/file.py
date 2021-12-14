@@ -4,9 +4,11 @@ from mimetypes import guess_extension
 from os import fstat
 from pathlib import Path
 from shutil import copyfile
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryFile
 from traceback import print_exc
 from typing import IO, Optional, Union
+from urllib.request import urlopen
+from fastapi.param_functions import Query
 
 import shortuuid
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, Form,
@@ -52,7 +54,7 @@ def record_view(file_information_parsed: FileBase):
     with get_conn() as conn:
         try:
             r.table("files").get(file_information_parsed.id).update({
-                "views": file_information_parsed.views + 1
+                "views": (file_information_parsed.views or 0) + 1
             }).run(conn)
         except:
             print_exc()
@@ -86,6 +88,7 @@ class UploadModel(BaseModel):
 @router.post(
     "/upload",
     response_model=FileBase,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the submitted form."
 )
@@ -151,6 +154,7 @@ class WebSaveModel(UploadModel):
 @router.post(
     "/websave",
     response_model=FileBase,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the internet."
 )
@@ -225,6 +229,7 @@ def websave(
 @router.get(
     "/{id}/info",
     response_model=FileBase,
+    response_model_exclude_unset=True,
     description="Gets information for a file."
 )
 def info(
@@ -254,7 +259,8 @@ def info(
 def img(
     id: str,
     background_tasks: BackgroundTasks,
-    user: Optional[UserBase] = Depends(auth_optional_dependency)
+    user: Optional[UserBase] = Depends(auth_optional_dependency),
+    analytics: bool = Query(True, description="Opt out of view recording.")
 ):
     with get_conn() as conn:
         file_information = r.table("files").get(id).run(conn)
@@ -270,10 +276,11 @@ def img(
     if file_information_parsed.private and not compare_owner(file_information_parsed, user):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-    background_tasks.add_task(
-        record_view,
-        file_information_parsed=file_information_parsed
-    )
+    if analytics:
+        background_tasks.add_task(
+            record_view,
+            file_information_parsed=file_information_parsed
+        )
 
     return FileResponse(img_path, media_type=file_information_parsed.mime)
 
@@ -286,7 +293,9 @@ def img(
 def thumb(
     id: str,
     background_tasks: BackgroundTasks,
-    user: Optional[UserBase] = Depends(auth_optional_dependency)
+    request: Request,
+    user: Optional[UserBase] = Depends(auth_optional_dependency),
+    analytics: bool = Query(True, description="Opt out of view recording.")
 ):
     with get_conn() as conn:
         file_information = r.table("files").get(id).run(conn)
@@ -303,15 +312,16 @@ def thumb(
             img_filename=file_information_parsed.file,
             mime=file_information_parsed.mime
         )
-        return RedirectResponse(f"/iamages/api/v2/file/{id}/img")
+        return RedirectResponse(request.url_for("img", id=id))
 
     if file_information_parsed.private and not compare_owner(file_information_parsed, user):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-    background_tasks.add_task(
-        record_view,
-        file_information_parsed=file_information_parsed
-    )
+    if analytics:
+        background_tasks.add_task(
+            record_view,
+            file_information_parsed=file_information_parsed
+        )
 
     return FileResponse(thumb_path, media_type=file_information_parsed.mime)
 
@@ -413,6 +423,9 @@ def delete(
         if not compare_owner(file_information_parsed, user):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
+        if user.pfp == file_information_parsed.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You may not delete your profile picture. Unset it before deleting.")
+
         img_file = Path(FILES_PATH, file_information_parsed.file)
         thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
         if img_file.exists():
@@ -424,7 +437,8 @@ def delete(
 
 @router.post(
     "/{id}/duplicate",
-    response_model=FileBase, 
+    response_model=FileBase,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Duplicates a file into an account."
 )

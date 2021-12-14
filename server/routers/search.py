@@ -17,6 +17,7 @@ router = APIRouter(
 @router.post(
     "/files",
     response_model=list[FileBase],
+    response_model_exclude_unset=True,
     description="Searches for files."
 )
 def search_files(
@@ -48,6 +49,7 @@ def search_files(
 @router.post(
     "/collections",
     response_model=list[Collection],
+    response_model_exclude_unset=True,
     description="Searches for collections."
 )
 def search_collections(
@@ -79,6 +81,7 @@ def search_collections(
 @router.post(
     "/users",
     response_model=list[UserBase],
+    response_model_exclude_unset=True,
     description="Searches for users."
 )
 def search_users(
@@ -87,7 +90,7 @@ def search_users(
     start_date: Optional[datetime] = Body(None, description="Date to start searching from.")
 ):
     query = r.table("users")
-    filters = r.row["username"].match(f"(?i){username}") & (~r.row["private"]) & (~r.row["hidden"])
+    filters = r.row["username"].match(f"(?i){username}")
 
     if start_date:
         filters = filters & (r.row["created"] < start_date)
