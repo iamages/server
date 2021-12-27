@@ -195,7 +195,7 @@ def collections(
         if start_date:
             filters = filters & (r.row["created"] < start_date)
 
-        query = r.table("files").filter(filters).order_by(r.desc("created"))
+        query = r.table("collections").filter(filters).order_by(r.desc("created"))
 
         if limit:
             query = query.limit(limit)

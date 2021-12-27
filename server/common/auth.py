@@ -26,7 +26,7 @@ def process_basic_auth(credentials: HTTPBasicCredentials) -> Optional[UserBase]:
     if not user_information:
         return None
 
-    user_information_parsed = UserInDB(**user_information)
+    user_information_parsed = UserInDB.parse_obj(user_information)
     if not (secrets.compare_digest(credentials.username, user_information_parsed.username) and pwd_context.verify(credentials.password, user_information_parsed.password)):
         return None
     
@@ -36,7 +36,7 @@ def process_basic_auth(credentials: HTTPBasicCredentials) -> Optional[UserBase]:
                 "password": pwd_context.hash(credentials.password)
             }).run(conn)
 
-    return UserBase(**user_information)
+    return UserBase.parse_obj(user_information)
 
 def auth_required_dependency(credentials: HTTPBasicCredentials = Depends(auth_required)) -> UserBase:
     user = process_basic_auth(credentials)

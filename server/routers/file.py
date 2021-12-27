@@ -86,13 +86,13 @@ class UploadModel(BaseModel):
     hidden: bool = Field(False, description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)")
 
 @router.post(
-    "/upload",
+    "/new/upload",
     response_model=FileBase,
     response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the submitted form."
 )
-def upload(
+def new_upload(
     info: Json[UploadModel] = Form(...),
     upload_file: UploadFile = File(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
@@ -152,14 +152,14 @@ class WebSaveModel(UploadModel):
     upload_url: AnyHttpUrl
 
 @router.post(
-    "/websave",
+    "/new/websave",
     response_model=FileBase,
     response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the internet."
 )
-def websave(
-    info: WebSaveModel,
+def new_websave(
+    info: WebSaveModel = Body(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     if not user and info.private:
@@ -208,7 +208,7 @@ def websave(
     )
 
     if user:
-        file_information_parsed.owner = user.username,
+        file_information_parsed.owner = user.username
         if info.private:
             file_information_parsed.private = info.private
 
