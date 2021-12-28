@@ -1,6 +1,7 @@
 __version__ = "3.1.0"
 __copyright__ = "© jkelol111 et al 2021-present"
 
+from datetime import timedelta
 from getpass import getpass
 from uuid import UUID
 
@@ -27,8 +28,11 @@ with get_conn(user="admin", password=getpass("Enter 'admin' password: ")) as con
 
     print("3/3: Upgrading files table.")
     for file in tqdm(r.table("files").run(conn)):
-        r.table("files").get(file["id"]).update({
-            "id": shortuuid.encode(UUID(file["id"]))
-        }).run(conn)
+        old_id = file["id"]
+        file_copy = file
+        file_copy["id"] = shortuuid.encode(UUID(old_id))
+        file_copy["created"] = file["created"] + timedelta(milliseconds=1)
+        r.table("files").insert(file_copy).run(conn)
+        r.table("files").get(old_id).delete().run(conn)
 
 print("Done!")
