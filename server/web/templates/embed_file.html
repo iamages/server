@@ -3,7 +3,9 @@
     <meta name="robots" content="noindex">
     <title>{{file.description}} - on Iamages</title>
     <meta name="description" content="{{file.description}}">
+    {% if file.owner -%}
     <meta name="author" content="{{file.owner}}">
+    {%- endif %}
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Iamages">
     <meta property="og:title" content="{{file.description}}">

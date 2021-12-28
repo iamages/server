@@ -1,16 +1,20 @@
 <html prefix="og: http://ogp.me/ns# article: https://ogp.me/ns/article">
   <head>
     <meta name="robots" content="noindex">
-    <title>{{description}} - on Iamages</title>
-    <meta name="description" content="{{description}}">
-    <meta name="author" content="{{owner}}">
+    <title>{{collection.description}} - on Iamages</title>
+    <meta name="description" content="{{collection.description}}">
+    {% if file.owner -%}
+    <meta name="author" content="{{collection.owner}}">
+    {%- endif %}
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Iamages">
-    <meta property="og:title" content="{{description}}">
-    <meta property="og:description" content="{{ files.__root__|length }} files in this Collection.">
-    <meta property="og:url" content="{{ url_for('embed_collection', id=id) }}">
-    <meta property="article:author" content="{{ url_for('embed_user', username=owner) }}">
-    <meta property="article:published_time" content="{{created}}">
+    <meta property="og:title" content="{{collection.description}}">
+    <meta property="og:description" content="{{ files|length }} files in this Collection.">
+    <meta property="og:url" content="{{ url_for('embed_collection', id=icollection.id) }}">
+    {% if file.owner -%}
+    <meta property="article:author" content="{{ url_for('embed_user', username=collection.owner) }}">
+    {%- endif %}
+    <meta property="article:published_time" content="{{collection.created}}">
     <meta name="twitter:card" content="summary">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#F1965B">
@@ -23,11 +27,11 @@
         <nav class="navbar">
           <div class="container">
             <div class="navbar-brand">
-              <a class="navbar-item" href="{{ url_for('embed_collection', id=id) }}">
+              <a class="navbar-item" href="{{ url_for('embed_collection', id=collection.id) }}">
                 <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
               </a>
-              <a class="navbar-item" href="{{ url_for('embed_collection', id=id) }}">
-                Embed Viewer&nbsp/&nbsp<b>{{description}}</b>
+              <a class="navbar-item" href="{{ url_for('embed_collection', id=collection.id) }}">
+                Embed Viewer&nbsp/&nbsp<b>{{collection.description}}</b>
               </a>
             </div>
           </div>

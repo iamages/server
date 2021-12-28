@@ -34,7 +34,7 @@ def new(
     description: str = Body(...),
     private: bool = Body(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Body(False, description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
-    file_ids: set[str] = Body(..., description="File IDs to add to collection."),
+    file_ids: set[str] = Body(None, description="File IDs to add to collection."),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     if not user and private:
@@ -66,10 +66,11 @@ def new(
 
         r.table("collections").insert(collection_information).run(conn)
 
-        for file_id in file_ids:
-            r.table("files").get(file_id).update({
-                "collection": collection_information_parsed.id
-            }).run(conn)
+        if file_ids:
+            for file_id in file_ids:
+                r.table("files").get(file_id).update({
+                    "collection": collection_information_parsed.id
+                }).run(conn)
 
         return collection_information
 
@@ -256,9 +257,6 @@ def embed(
 
         return templates.TemplateResponse("embed_collection.html", {
             "request": request,
-            "id": id,
-            "description": collection_information_parsed.description,
-            "owner": collection_information_parsed.owner or "Anonymous",
-            "created": collection_information_parsed.created,
-            "files": files
+            "collection": collection_information_parsed,
+            "files": files_parsed
         })
