@@ -35,4 +35,10 @@ with get_conn(user="admin", password=getpass("Enter 'admin' password: ")) as con
         r.table("files").insert(file_copy).run(conn)
         r.table("files").get(old_id).delete().run(conn)
 
+    print("4/4: Upgrading users table.")
+    for user in tqdm(r.table("users").run(conn)):
+        r.table("users").get(user["username"]).update({
+            "created": user["created"] + timedelta(milliseconds=1)
+        }).run(conn)
+
 print("Done!")
