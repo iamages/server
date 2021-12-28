@@ -25,37 +25,34 @@ arg_parser.add_argument(
 
 arg_parsed = arg_parser.parse_args()
 
-conn = get_conn(server_config.iamages_db_user, server_config.iamages_db_pwd, "iamages")
-
-if arg_parsed.command == "chupwd":
-    new_password = getpass(f"Enter a new password for {server_config.iamages_db_user}: ")
-    new_password_confirm = getpass("Enter the new password again: ")
-    if new_password != new_password_confirm:
-        raise Exception("Password mismatch!")
-    r.db("rethinkdb").table("users").get(server_config.iamages_db_user).update({
-        "password": new_password
-    }).run(conn)
-    print(f"Changed the password for database user '{server_config.iamages_db_user}'.")
-elif arg_parsed.command == "getfile":
-    pprint(r.table("files").get(arg_parsed.data).run(conn))
-elif arg_parsed.command == "getuser":
-    pprint(r.table("users").get(arg_parsed.data).run(conn))
-elif arg_parsed.command == "getcollection":
-    pprint(r.table("collections").get(arg_parsed.data).run(conn))
-elif arg_parsed.command == "deletefile":
-    query = r.table("files").get(arg_parsed.data)
-    file_information = query.run(conn)
-    if not file_information:
-        print("File doesn't exist!")
-        exit(1)
-    file = Path(FILES_PATH, file_information["file"])
-    if file.exists():
-        file.unlink()
-    thumb = Path(THUMBS_PATH, file_information["file"])
-    if thumb.exists():
-        thumb.unlink()
-    query.delete().run(conn)
-else:
-    print("Command doesn't exist!")
-
-conn.close()
+with get_conn(user=server_config.iamages_db_user, password=server_config.iamages_db_pwd) as conn:
+    if arg_parsed.command == "chupwd":
+        new_password = getpass(f"Enter a new password for {server_config.iamages_db_user}: ")
+        new_password_confirm = getpass("Enter the new password again: ")
+        if new_password != new_password_confirm:
+            raise Exception("Password mismatch!")
+        r.db("rethinkdb").table("users").get(server_config.iamages_db_user).update({
+            "password": new_password
+        }).run(conn)
+        print(f"Changed the password for database user '{server_config.iamages_db_user}'.")
+    elif arg_parsed.command == "getfile":
+        pprint(r.table("files").get(arg_parsed.data).run(conn))
+    elif arg_parsed.command == "getuser":
+        pprint(r.table("users").get(arg_parsed.data).run(conn))
+    elif arg_parsed.command == "getcollection":
+        pprint(r.table("collections").get(arg_parsed.data).run(conn))
+    elif arg_parsed.command == "deletefile":
+        query = r.table("files").get(arg_parsed.data)
+        file_information = query.run(conn)
+        if not file_information:
+            print("File doesn't exist!")
+            exit(1)
+        file = Path(FILES_PATH, file_information["file"])
+        if file.exists():
+            file.unlink()
+        thumb = Path(THUMBS_PATH, file_information["file"])
+        if thumb.exists():
+            thumb.unlink()
+        query.delete().run(conn)
+    else:
+        print("Command doesn't exist!")
