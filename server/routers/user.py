@@ -308,11 +308,9 @@ def embed(
         if not user_information:
             raise HTTPException(status.HTTP_404_NOT_FOUND)
         user_information_parsed = UserBase.parse_obj(user_information)
-        if user_information_parsed.private:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
         return templates.TemplateResponse("embed_user.html", {
             "request": request,
             "user": user_information_parsed,
-            "files": r.table("files").filter()
+            "files": r.table("files").filter((r.row["owner"] == username) & ~r.row["private"] & ~r.row["hidden"]).order_by(r.desc("created")).limit(10).run(conn)
         })

@@ -37,27 +37,23 @@
         <div class="container has-text-centered">
           <div class="columns is-centered is-vcentered">
             <div class="column is-half">
-              {% for file in files.__root__ -%}
+              {% for file in files -%}
                 <div class="card">
-                  <header class="card-header">
-                    <p class="card-header-title">
-                      {% if file.owner -%}
-                        <a href="{{ url_for('embed_user', username=file.owner) }}" target="_blank">{{file.owner}}</a>
-                      {% else %}
-                        Anonymous
-                      {%- endif %}
-                    </p>
-                  </header>
                   <div class="card-image">
-                    <figure class="image is-4by3">
+                    <figure class="image">
                       <img src="{{ url_for('thumb', id=file.id) }}" alt="Thumbnail for: {{file.description}}">
                     </figure>
                   </div>
-                  <div class="card-content">
-                    <div class="content">
-                      <a href="{{ url_for('embed_file', id=file.id) }}" target="_blank">{{file.description}}</a>
-                    </div>
-                  </div>
+                  <div class="card-content has-text-left">
+                    {% if file.owner -%}
+                    <a class="has-text-weight-bold" href="{{ url_for('embed_user', username=file.owner) }}" target="_blank">
+                      {{ file.owner }}
+                    </a>
+                    {%- else %}
+                    <span class="has-text-weight-bold">Anonymous</span>
+                    {%- endif %}
+                    <a href="{{ url_for('embed_file', id=file.id) }}" target="_blank">{{ file.description }}</a>
+                  </div>  
                 </div>
                 <br>
               {%- endfor %}

@@ -1,15 +1,15 @@
 <html prefix="og: http://ogp.me/ns# article: https://ogp.me/ns/article">
   <head>
     <meta name="robots" content="noindex">
-    <title>{{username}} - on Iamages</title>
-    <meta name="description" content="View {{username}}'s profile on Iamages">
-    <meta name="author" content="{{username}}">
+    <title>{{user.username}} - on Iamages</title>
+    <meta name="description" content="View {{user.username}}'s profile on Iamages">
+    <meta name="author" content="{{user.username}}">
     <meta property="og:type" content="profile">
     <meta property="og:site_name" content="Iamages">
-    <meta property="og:title" content="{{username}}">
-    <meta property="og:description" content="View {{username}}'s profile on Iamages">
-    <meta property="og:url" content="{{ url_for('embed_user', username=username) }}">
-    <meta property="profile:username" content="{{username}}">
+    <meta property="og:title" content="{{user.username}}">
+    <meta property="og:description" content="View {{user.username}}'s profile on Iamages">
+    <meta property="og:url" content="{{ url_for('embed_user', username=user.username) }}">
+    <meta property="profile:username" content="{{user.username}}">
     <meta name="twitter:card" content="summary">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#F1965B">
@@ -22,11 +22,11 @@
         <nav class="navbar">
           <div class="container">
             <div class="navbar-brand">
-              <a class="navbar-item" href="{{ url_for('embed_user', username=username) }}">
+              <a class="navbar-item" href="{{ url_for('embed_user', username=user.username) }}">
                 <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
               </a>
-              <a class="navbar-item" href="{{ url_for('embed_user', username=username) }}">
-                Embed Viewer&nbsp/&nbsp<b>{{username}}</b>
+              <a class="navbar-item" href="{{ url_for('embed_user', username=user.username) }}">
+                Embed Viewer&nbsp/&nbsp<b>{{user.username}}</b>
               </a>
             </div>
           </div>
@@ -36,27 +36,16 @@
         <div class="container has-text-centered">
           <div class="columns is-centered is-vcentered">
             <div class="column is-half">
-              {% for file in files.__root__ %}
+              {% for file in files %}
                 <div class="card">
-                  <header class="card-header">
-                    <p class="card-header-title">
-                      {% if file.owner %}
-                        <a href="{{ url_for('embed_user', username=file.owner) }}" target="_blank">{{file.owner}}</a>
-                      {% else %}
-                        Anonymous
-                      {% endif %}
-                    </p>
-                  </header>
                   <div class="card-image">
-                    <figure class="image is-4by3">
+                    <figure class="image">
                       <img src="{{ url_for('thumb', id=file.id) }}" alt="Thumbnail for: {{file.description}}">
                     </figure>
                   </div>
-                  <div class="card-content">
-                    <div class="content">
-                      <a href="{{ url_for('embed_file', id=file.id) }}" target="_blank">{{file.description}}</a>
-                    </div>
-                  </div>
+                  <div class="card-content has-text-left">
+                    <a href="{{ url_for('embed_file', id=file.id) }}" target="_blank">{{ file.description }}</a>
+                  </div>  
                 </div>
                 <br>
               {% endfor %}

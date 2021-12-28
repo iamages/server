@@ -346,13 +346,7 @@ def embed(
 
     return templates.TemplateResponse("embed_file.html", {
         "request": request,
-        "id": id,
-        "description": file_information_parsed.description,
-        "mime": file_information_parsed.mime,
-        "width": file_information_parsed.width,
-        "height": file_information_parsed.height,
-        "created": file_information_parsed.created,
-        "owner": file_information_parsed.owner or "Anonymous"
+        "file": file_information_parsed
     })
 
 
