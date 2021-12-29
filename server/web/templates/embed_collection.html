@@ -10,7 +10,7 @@
     <meta property="og:site_name" content="Iamages">
     <meta property="og:title" content="{{collection.description}}">
     <meta property="og:description" content="{{ files|length }} files in this Collection.">
-    <meta property="og:url" content="{{ url_for('embed_collection', id=icollection.id) }}">
+    <meta property="og:url" content="{{ url_for('embed_collection', id=collection.id) }}">
     {% if collection.owner -%}
     <meta property="article:author" content="{{ url_for('embed_user', username=collection.owner) }}">
     {%- endif %}
