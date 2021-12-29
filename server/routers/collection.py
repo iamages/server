@@ -34,20 +34,21 @@ def new(
     description: str = Body(...),
     private: bool = Body(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Body(False, description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
-    file_ids: set[str] = Body(None, description="File IDs to add to collection."),
+    file_ids: Optional[set[str]] = Body(None, description="File IDs to add to collection."),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
     if not user and private:
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 
     with get_conn() as conn:
-        for file_id in file_ids:
-            file_information = r.table("files").get(file_id).run(conn)
-            if not file_information:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {file_id}")
-            file_information_parsed = FileInDB.parse_obj(file_information)
-            if file_information_parsed.private and not compare_owner(file_information_parsed, user):
-                raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=f"You don't have permission for File ID: {file_id}")
+        if file_ids is not None:
+            for file_id in file_ids:
+                file_information = r.table("files").get(file_id).run(conn)
+                if not file_information:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {file_id}")
+                file_information_parsed = FileInDB.parse_obj(file_information)
+                if file_information_parsed.private and not compare_owner(file_information_parsed, user):
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=f"You don't have permission for File ID: {file_id}")
     
         collection_information_parsed = Collection(
             id=shortuuid.uuid(),
