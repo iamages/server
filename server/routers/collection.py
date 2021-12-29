@@ -66,7 +66,7 @@ def new(
 
         r.table("collections").insert(collection_information).run(conn)
 
-        if file_ids:
+        if not file_ids is None:
             for file_id in file_ids:
                 r.table("files").get(file_id).update({
                     "collection": collection_information_parsed.id
