@@ -3,7 +3,7 @@
     <meta name="robots" content="noindex">
     <title>{{collection.description}} - on Iamages</title>
     <meta name="description" content="{{collection.description}}">
-    {% if file.owner -%}
+    {% if collection.owner -%}
     <meta name="author" content="{{collection.owner}}">
     {%- endif %}
     <meta property="og:type" content="article">
@@ -11,7 +11,7 @@
     <meta property="og:title" content="{{collection.description}}">
     <meta property="og:description" content="{{ files|length }} files in this Collection.">
     <meta property="og:url" content="{{ url_for('embed_collection', id=icollection.id) }}">
-    {% if file.owner -%}
+    {% if collection.owner -%}
     <meta property="article:author" content="{{ url_for('embed_user', username=collection.owner) }}">
     {%- endif %}
     <meta property="article:published_time" content="{{collection.created}}">
