@@ -37,3 +37,17 @@ async def privacy(request: Request):
             "contact": server_config.iamages_server_contact
         }
     })
+
+@router.get(
+    "/nsfw_info",
+    name="nsfw_info",
+    response_class=HTMLResponse,
+    include_in_schema=False
+)
+async def nsfw_info(request: Request):
+    return templates.TemplateResponse("nsfw_info.html", {
+        "request": request,
+        "owner": {
+            "contact": server_config.iamages_server_contact
+        }
+    })

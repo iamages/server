@@ -1,0 +1,70 @@
+<html>
+  <head>
+    <title>Iamages NSFW Toggle</title>
+    <meta name="description" content="To comply with App Store requirements, this website allows you to enable NSFW viewing for your Iamages account.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#F1965B">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+  </head>
+  <body>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('nsfw_toggle') }}">
+                <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
+              </a>
+              <a class="navbar-item" href="{{ url_for('nsfw_toggle') }}">
+                NSFW Toggle
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container">
+          <div class="columns is-centered is-vcentered">
+            <div class="column is-half">
+              <article class="message {{'is-primary' if toggled else 'is-danger'}}">
+                <div class="message-header">
+                  <p>
+                    {% if toggled -%}
+                    NSFW viewing option toggled successfully.
+                    {% else %}
+                    Failed to toggle NSFW viewing option.
+                    {%- endif %}
+                  </p>
+                </div>
+                <div class="message-body">
+                  {% if toggled -%}
+                  The current status is: <b>{{ 'Enabled' if status else 'Disabled' }}</b>
+                  <br><br>
+                    {% if status -%}
+                    To start viewing NSFW content, close your mobile app and open it again.
+                    {% else %}
+                    Upon closing your mobile app and opening it again, NSFW content will be hidden.
+                    {% endif %}
+                  {% else %}
+                  Try again later. If you're still unable to toggle after a few hours, <a href="{{ owner.contact }}">contact us</a>.
+                  {%- endif %}
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-foot">
+        <section class="section">
+          <div class="container has-text-centered content">
+            <p>
+              By using this service, you agree to our <a href="{{ url_for('tos') }}" target="_blank">Terms of Service</a> and 
+              <a href="{{ url_for('privacy') }}" target="_blank">Privacy Policy</a>
+            </p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </body>
+</html>

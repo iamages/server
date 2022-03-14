@@ -4,7 +4,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, Union
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, BackgroundTasks, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -16,6 +16,7 @@ from ..common.templates import templates
 from ..modals.collection import Collection
 from ..modals.file import FileBase, FileInDB
 from ..modals.user import UserBase, UserInDB
+from ..common.config import server_config
 
 
 class AllUserOperation(str, Enum):
@@ -314,3 +315,48 @@ def embed(
             "user": user_information_parsed,
             "files": r.table("files").filter((r.row["owner"] == username) & ~r.row["private"] & ~r.row["hidden"]).order_by(r.desc("created")).limit(10).run(conn)
         })
+
+@router.get(
+    "/nsfw_toggle",
+    response_class=HTMLResponse,
+    name="nsfw_toggle",
+    include_in_schema=False
+)
+async def nsfw_toggle(
+    request: Request
+):
+    return templates.TemplateResponse("nsfw_toggle.html", {
+        "request": request
+    })
+
+@router.post(
+    "/nsfw_toggled",
+    response_class=HTMLResponse,
+    name="nsfw_toggled",
+    include_in_schema=False
+)
+def nsfw_toggled(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    toggled = False
+    user = None
+    with get_conn() as conn:
+        try:
+            user = UserInDB.parse_obj(r.table("users").get(username).run(conn))
+            if pwd_context.verify(password, user.password):
+                r.table("users").get(username).update({
+                    "nsfw_enabled": not user.nsfw_enabled
+                }).run(conn)
+                toggled = True
+        except:
+            pass
+    return templates.TemplateResponse("nsfw_toggled.html", {
+        "request": request,
+        "toggled": toggled,
+        "status": (not user.nsfw_enabled) if user else None,
+        "owner": {
+            "contact": server_config.iamages_server_contact
+        }
+    })

@@ -1,0 +1,59 @@
+<html>
+  <head>
+    <title>Iamages NSFW Toggle</title>
+    <meta name="description" content="To comply with App Store requirements, this website allows you to enable NSFW viewing for your Iamages account.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#F1965B">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+  </head>
+  <body>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('nsfw_info') }}">
+                <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
+              </a>
+              <a class="navbar-item" href="{{ url_for('nsfw_info') }}">
+                NSFW Info
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container content">
+          <h2>Why?</h2>
+          <p>
+            Due to Apple's App Store requirements, to view NSFW files, you will need to visit 
+            <a href="{{ url_for('nsfw_toggle') }}">NSFW Toggle</a> to change your settings, instead
+            of having a simple toggle within the app.
+          </p>
+          <h2>FAQs</h2>
+          <ol>
+            <li>
+              <b>Will this delete my existing NSFW files?</b>
+              <br>
+              <b>No</b>. All your files will be kept intact, NSFW or not.
+            </li>
+            <li>
+              <b>Can I still see NSFW files without logging in?</b>
+              <br>
+              Unfortunately, that is <b>no</b> longer possible in our mobile apps. You will need to have
+              a registered account with the NSFW viewing option toggled to view NSFW files in app.
+              <br><br>
+              Our web app & API isn't affected by this change.
+            </li>
+            <li>
+              <b>I cannot toggle NSFW viewing on through your <a href="{{ url_for('nsfw_toggle') }}">NSFW Toggle</a> page. Who do I contact?</b>
+              <br>
+              For login related problems, please <a href="{{ owner.contact }}">contact us</a> for assistance.
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
