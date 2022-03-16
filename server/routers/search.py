@@ -21,6 +21,7 @@ router = APIRouter(
     description="Searches for files."
 )
 def search_files(
+    nsfw: bool = Query(False),
     description: str = Body(..., description="Description to search for."),
     limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from."),
@@ -34,6 +35,9 @@ def search_files(
         filters  = filters & (r.row["owner"] == username)
         if not user:
             filters = filters & (~r.row["private"]) & (~r.row["hidden"])
+
+    if not nsfw:
+        filters = filters & (~r.row["nsfw"])
 
     if start_date:
         filters = filters & (r.row["created"] < start_date)

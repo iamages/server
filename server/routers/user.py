@@ -4,7 +4,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, Union
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, BackgroundTasks, Form
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, BackgroundTasks, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -142,6 +142,7 @@ def info(
 )
 def files(
     username: str,
+    nsfw: bool = Query(False),
     user: Optional[UserBase] = Depends(auth_optional_dependency),
     limit: Optional[int] = Body(None, ge=1, description="Limit file results."),
     start_date: Optional[datetime] = Body(None, description="Date to start returning results from.")
@@ -157,6 +158,9 @@ def files(
 
         if not compare_user(user_information_parsed, user):
             filters = filters & (~r.row["private"]) & (~r.row["hidden"])
+
+        if not nsfw:
+            filters = filters & (~r.row["nsfw"])
 
         if start_date:
             filters = filters & (r.row["created"] < start_date)

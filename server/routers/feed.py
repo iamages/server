@@ -19,11 +19,14 @@ router = APIRouter(
     description="Gets the latest publicly uploaded files."
 )
 def latest_files(
+    nsfw: bool = Query(True),
     limit: int = Body(..., ge=1, description="Limit file results."),
     start_date: Optional[datetime] = Body(None, description="Date to start returning results from.")
 ):
     with get_conn() as conn:
         filters = (~r.row["private"]) & (~r.row["hidden"])
+        if not nsfw:
+            filters = filters & (~r.row["nsfw"])
         if start_date:
             filters = filters & (r.row["created"] < start_date)
         return r.table("files").filter(filters).order_by(r.desc("created")).limit(limit).run(conn)
@@ -34,11 +37,14 @@ def latest_files(
     response_model_exclude_unset=True,
     description="Get 10 most popular publicly uploaded files."
 )
-def popular():
+def popular(
+    nsfw: bool = Query(True)
+):
+    filters = (~r.row["private"]) & (~r.row["hidden"])
+    if not nsfw:
+        filters = filters & (~r.row["nsfw"])
     with get_conn() as conn:
-        return r.table("files").filter(
-            (~r.row["private"]) & (~r.row["hidden"])
-        ).order_by(r.desc("views")).limit(10).run(conn)
+        return r.table("files").filter(filters).order_by(r.desc("views")).limit(10).run(conn)
 
 @router.get(
     "/files/random",
