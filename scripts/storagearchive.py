@@ -123,10 +123,10 @@ elif arg_parsed.command == "archive":
 
         print("5/7: Writing archive metadata.")
         with (Path(temp_dir, "meta.json")).open("wb") as meta_file:
-            meta_file.write(json.dumps({
+            json.dump({
                 "version": SUPPORTED_ARCHIVE_VER,
                 "created": created_time.isoformat()
-            }))
+            }, meta_file)
 
         archive_basename = f"iamages-{created_time.strftime('%d%m%Y%H%M')}"
 
