@@ -125,7 +125,7 @@ elif arg_parsed.command == "archive":
         with (Path(temp_dir, "meta.json")).open("wb") as meta_file:
             meta_file.write(json.dumps({
                 "version": SUPPORTED_ARCHIVE_VER,
-                "created": created_time
+                "created": created_time.isoformat()
             }))
 
         archive_basename = f"iamages-{created_time.strftime('%d%m%Y%H%M')}"
