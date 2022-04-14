@@ -122,7 +122,7 @@ elif arg_parsed.command == "archive":
         created_time = datetime.now(timezone.utc)
 
         print("5/7: Writing archive metadata.")
-        with (Path(temp_dir, "meta.json")).open("wb") as meta_file:
+        with (Path(temp_dir, "meta.json")).open("w") as meta_file:
             json.dump({
                 "version": SUPPORTED_ARCHIVE_VER,
                 "created": created_time.isoformat()
