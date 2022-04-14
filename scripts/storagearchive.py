@@ -83,7 +83,8 @@ elif arg_parsed.command == "archive":
                     "height",
                     "file",
                     "owner",
-                    "collection"
+                    "collection",
+                    "views"
                 ])
                 writer.writeheader()
                 writer.writerows(r.table("files").run(conn))
@@ -105,10 +106,10 @@ elif arg_parsed.command == "archive":
             with open(Path(temp_dir, "users.csv"), "w") as users_csv:
                 writer = csv.DictWriter(users_csv, fieldnames=[
                     "username",
-                    "private",
-                    "hidden",
+                    "password",
                     "created",
-                    "password"
+                    "pfp",
+                    "nsfw_enabled"
                 ])
                 writer.writeheader()
                 writer.writerows(r.table("users").run(conn))
