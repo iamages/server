@@ -109,7 +109,9 @@ elif arg_parsed.command == "archive":
                     "password",
                     "created",
                     "pfp",
-                    "nsfw_enabled"
+                    "nsfw_enabled",
+                    "private",
+                    "hidden"
                 ])
                 writer.writeheader()
                 writer.writerows(r.table("users").run(conn))
