@@ -93,6 +93,7 @@ def new(
             username=username,
             private=False,
             hidden=False,
+            nsfw_enabled=False,
             created=datetime.now(timezone.utc),
             password=pwd_context.hash(password)
         )
