@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .routers import collection, feed, file, legal, root, search, user
+from .common.db import db_conn_mgr
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -43,6 +44,14 @@ app = FastAPI(
     root_path="/iamages/api/v3",
     openapi_tags=tags_metadata
 )
+
+@app.on_event("startup")
+async def startup():
+    await db_conn_mgr.connect()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await db_conn_mgr.close()
 
 app.mount("/private/static", StaticFiles(directory=Path("./server/web/static")), name="static")
 app.include_router(feed.router)

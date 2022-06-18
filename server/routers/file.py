@@ -20,7 +20,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field, Json
 from ..common.auth import (auth_optional_dependency, auth_required_dependency,
                            compare_owner)
 from ..common.config import server_config
-from ..common.db import get_conn, r
+from ..common.db import db_conn_mgr, r
 from ..common.paths import FILES_PATH, THUMBS_PATH
 from ..common.templates import templates
 from ..common.utils import handle_str2bool
@@ -50,14 +50,13 @@ def create_thumb(img_filename: Path, mime: str):
 
         copyfile(temp.name, thumb_path)
 
-def record_view(file_information_parsed: FileBase):
-    with get_conn() as conn:
-        try:
-            r.table("files").get(file_information_parsed.id).update({
-                "views": (file_information_parsed.views or 0) + 1
-            }).run(conn)
-        except:
-            print_exc()
+async def record_view(file_information_parsed: FileBase):
+    try:
+        await r.table("files").get(file_information_parsed.id).update({
+            "views": (file_information_parsed.views or 0) + 1
+        }).run(db_conn_mgr.conn)
+    except:
+        print_exc()
 
 def save_img(fp: IO, path: Path, mime: str) -> tuple[int]:
     with Image.open(fp) as img:
@@ -92,7 +91,7 @@ class UploadModel(BaseModel):
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the submitted form."
 )
-def new_upload(
+async def new_upload(
     info: Json[UploadModel] = Form(...),
     upload_file: UploadFile = File(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
@@ -137,13 +136,12 @@ def new_upload(
     # FIXME: Patch for 'Object of type PosixPath is not JSON serializable' in RethinkDB.
     file_information["file"] = str(file_information["file"])
 
-    with get_conn() as conn:
-        try:
-            r.table("files").insert(file_information).run(conn)
-        except:
-            print_exc()
-            new_file_path.unlink()
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    try:
+        await r.table("files").insert(file_information).run(db_conn_mgr.conn)
+    except:
+        print_exc()
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
@@ -158,7 +156,7 @@ class WebSaveModel(UploadModel):
     status_code=status.HTTP_201_CREATED,
     description="Uploads a file from the internet."
 )
-def new_websave(
+async def new_websave(
     info: WebSaveModel = Body(...),
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
@@ -216,13 +214,12 @@ def new_websave(
     # FIXME: Patch for 'Object of type PosixPath is not JSON serializable' in RethinkDB.
     file_information["file"] = str(file_information["file"])
 
-    with get_conn() as conn:
-        try:
-            r.table("files").insert(file_information).run(conn)
-        except:
-            print_exc()
-            new_file_path.unlink()
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    try:
+        await r.table("files").insert(file_information).run(db_conn_mgr.conn)
+    except:
+        print_exc()
+        new_file_path.unlink()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return file_information
 
@@ -232,12 +229,11 @@ def new_websave(
     response_model_exclude_unset=True,
     description="Gets information for a file."
 )
-def info(
+async def info(
     id: str,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(id).run(conn)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -256,14 +252,13 @@ def info(
     name="img",
     description="Gets image for a file."
 )
-def img(
+async def img(
     id: str,
     background_tasks: BackgroundTasks,
     user: Optional[UserBase] = Depends(auth_optional_dependency),
     analytics: bool = Query(True, description="Opt out of view recording.")
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(id).run(conn)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -290,15 +285,14 @@ def img(
     name="thumb",
     description="Gets thumbnail for a file."
 )
-def thumb(
+async def thumb(
     id: str,
     background_tasks: BackgroundTasks,
     request: Request,
     user: Optional[UserBase] = Depends(auth_optional_dependency),
     analytics: bool = Query(True, description="Opt out of view recording.")
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(id).run(conn)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -331,12 +325,11 @@ def thumb(
     name="embed_file",
     description="Gets embed for a file."
 )
-def embed(
+async def embed(
     request: Request,
     id: str
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(id).run(conn)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
     if not file_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
@@ -361,73 +354,71 @@ class FileModifiableFields(str, Enum):
     status_code=status.HTTP_204_NO_CONTENT,
     description="Modifies a file."
 )
-def modify(
+async def modify(
     id: str,
     field: FileModifiableFields = Body(..., description="Data field to modify for the file."),
     data: Union[bool, str] = Body(..., description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
-    with get_conn() as conn:
-        query = r.table("files").get(id)
+    query = r.table("files").get(id)
 
-        file_information = query.run(conn)
-        if not file_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
+    file_information = await query.run(db_conn_mgr.conn)
+    if not file_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-        file_information_parsed = FileInDB.parse_obj(file_information)
-        if not compare_owner(file_information_parsed, user):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-        
-        if field == FileModifiableFields.description:
-            query = query.update({
-                "description": str(data)
-            })
-        elif field == FileModifiableFields.nsfw:
-            query = query.update({
-                "nsfw": handle_str2bool(data)
-            })
-        elif field == FileModifiableFields.private:
-            if user.pfp == file_information_parsed.id:
-                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You may not make your profile photo private.")
-            query = query.update({
-                "private": handle_str2bool(data)
-            })
-        elif field == FileModifiableFields.hidden:
-            query = query.update({
-                "hidden": handle_str2bool(data)
-            })
+    file_information_parsed = FileInDB.parse_obj(file_information)
+    if not compare_owner(file_information_parsed, user):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    
+    if field == FileModifiableFields.description:
+        query = query.update({
+            "description": str(data)
+        })
+    elif field == FileModifiableFields.nsfw:
+        query = query.update({
+            "nsfw": handle_str2bool(data)
+        })
+    elif field == FileModifiableFields.private:
+        if user.pfp == file_information_parsed.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You may not make your profile photo private.")
+        query = query.update({
+            "private": handle_str2bool(data)
+        })
+    elif field == FileModifiableFields.hidden:
+        query = query.update({
+            "hidden": handle_str2bool(data)
+        })
 
-        query.run(conn)
+    await query.run(db_conn_mgr.conn)
 
 @router.delete(
     "/{id}/delete",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Deletes a file."
 )
-def delete(
+async def delete(
     id: str,
     user: UserBase = Depends(auth_required_dependency)
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(id).run(conn)
-        if not file_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
+    if not file_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-        file_information_parsed = FileInDB.parse_obj(file_information)
-        if not compare_owner(file_information_parsed, user):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    file_information_parsed = FileInDB.parse_obj(file_information)
+    if not compare_owner(file_information_parsed, user):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-        if user.pfp == file_information_parsed.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You may not delete your profile picture. Unset it before deleting.")
+    if user.pfp == file_information_parsed.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You may not delete your profile picture. Unset it before deleting.")
 
-        img_file = Path(FILES_PATH, file_information_parsed.file)
-        thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
-        if img_file.exists():
-            img_file.unlink()
-        if thumb_file.exists(): 
-            thumb_file.unlink()
+    img_file = Path(FILES_PATH, file_information_parsed.file)
+    thumb_file = Path(THUMBS_PATH, file_information_parsed.file)
+    if img_file.exists():
+        img_file.unlink()
+    if thumb_file.exists(): 
+        thumb_file.unlink()
 
-        r.table("files").get(id).delete().run(conn)
+    await r.table("files").get(id).delete().run(db_conn_mgr.conn)
 
 @router.post(
     "/{id}/duplicate",
@@ -436,46 +427,45 @@ def delete(
     status_code=status.HTTP_201_CREATED,
     description="Duplicates a file into an account."
 )
-def duplicate(
+async def duplicate(
     id: str,
     user: UserBase = Depends(auth_required_dependency)
 ):
-    with get_conn() as conn:
-        file_information = r.table("files").get(str(id)).run(conn)
-        if not file_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
-        file_information_parsed = FileInDB.parse_obj(file_information)
+    file_information = await r.table("files").get(id).run(db_conn_mgr.conn)
+    if not file_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    file_information_parsed = FileInDB.parse_obj(file_information)
 
-        if file_information_parsed.private and not compare_owner(file_information_parsed, user):
-            raise HTTPException(status.HTTP_403_FORBIDDEN)
+    if file_information_parsed.private and not compare_owner(file_information_parsed, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
 
-        duplicated_file_name = shortuuid.uuid() + file_information_parsed.file.suffix
+    duplicated_file_name = shortuuid.uuid() + file_information_parsed.file.suffix
 
-        duplicated_file_information_parsed = FileInDB(
-            id=shortuuid.uuid(),
-            description = file_information_parsed.description,
-            nsfw=file_information_parsed.nsfw,
-            private=True,
-            hidden=True,
-            created=datetime.now(timezone.utc),
-            mime=file_information_parsed.mime,
-            width=file_information_parsed.width,
-            height=file_information_parsed.height,
-            file=duplicated_file_name,
-            owner=user.username
-        )
+    duplicated_file_information_parsed = FileInDB(
+        id=shortuuid.uuid(),
+        description = file_information_parsed.description,
+        nsfw=file_information_parsed.nsfw,
+        private=True,
+        hidden=True,
+        created=datetime.now(timezone.utc),
+        mime=file_information_parsed.mime,
+        width=file_information_parsed.width,
+        height=file_information_parsed.height,
+        file=duplicated_file_name,
+        owner=user.username
+    )
 
-        duplicated_file_information = duplicated_file_information_parsed.dict(exclude_unset=True)
+    duplicated_file_information = duplicated_file_information_parsed.dict(exclude_unset=True)
 
-        img_file = Path(FILES_PATH, file_information_parsed.file)
-        duplicated_img_file = Path(FILES_PATH, duplicated_file_name)
-        copyfile(img_file, duplicated_img_file)
+    img_file = Path(FILES_PATH, file_information_parsed.file)
+    duplicated_img_file = Path(FILES_PATH, duplicated_file_name)
+    copyfile(img_file, duplicated_img_file)
 
-        try:
-            r.table("files").insert(duplicated_file_information).run(conn)
-        except:
-            print_exc()
-            duplicated_img_file.unlink()
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    try:
+        await r.table("files").insert(duplicated_file_information).run(db_conn_mgr.conn)
+    except:
+        print_exc()
+        duplicated_img_file.unlink()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return duplicated_file_information
+    return duplicated_file_information

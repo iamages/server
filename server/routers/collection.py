@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from ..common.auth import (auth_optional_dependency, auth_required_dependency,
                            compare_owner)
-from ..common.db import get_conn, r
+from ..common.db import db_conn_mgr, r
 from ..common.paths import FILES_PATH, THUMBS_PATH
 from ..common.templates import templates
 from ..common.utils import handle_str2bool
@@ -30,7 +30,7 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
     description="Creates a new collection."
 )
-def new(
+async def new(
     description: str = Body(...),
     private: bool = Body(False, description="File privacy status. (only visible to user, requires `authorization`)"),
     hidden: bool = Body(False, description="File hiding status. (visible to anyone with `id`, through links, does not show up in public lists)"),
@@ -40,40 +40,39 @@ def new(
     if not user and private:
         raise HTTPException(status.HTTP_403_FORBIDDEN)
 
-    with get_conn() as conn:
-        if file_ids is not None:
-            for file_id in file_ids:
-                file_information = r.table("files").get(file_id).run(conn)
-                if not file_information:
-                    raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {file_id}")
-                file_information_parsed = FileInDB.parse_obj(file_information)
-                if file_information_parsed.private and not compare_owner(file_information_parsed, user):
-                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=f"You don't have permission for File ID: {file_id}")
-    
-        collection_information_parsed = Collection(
-            id=shortuuid.uuid(),
-            description=description,
-            private=False,
-            hidden=hidden,
-            created=datetime.now(timezone.utc)
-        )
+    if file_ids is not None:
+        for file_id in file_ids:
+            file_information = await r.table("files").get(file_id).run(db_conn_mgr.conn)
+            if not file_information:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {file_id}")
+            file_information_parsed = FileInDB.parse_obj(file_information)
+            if file_information_parsed.private and not compare_owner(file_information_parsed, user):
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=f"You don't have permission for File ID: {file_id}")
 
-        if user:
-            collection_information_parsed.owner = user.username
-            if private:
-                collection_information_parsed.private = private
+    collection_information_parsed = Collection(
+        id=shortuuid.uuid(),
+        description=description,
+        private=False,
+        hidden=hidden,
+        created=datetime.now(timezone.utc)
+    )
 
-        collection_information = collection_information_parsed.dict(exclude_unset=True)
+    if user:
+        collection_information_parsed.owner = user.username
+        if private:
+            collection_information_parsed.private = private
 
-        r.table("collections").insert(collection_information).run(conn)
+    collection_information = collection_information_parsed.dict(exclude_unset=True)
 
-        if file_ids is not None:
-            for file_id in file_ids:
-                r.table("files").get(file_id).update({
-                    "collection": collection_information_parsed.id
-                }).run(conn)
+    await r.table("collections").insert(collection_information).run(db_conn_mgr.conn)
 
-        return collection_information
+    if file_ids is not None:
+        for file_id in file_ids:
+            await r.table("files").get(file_id).update({
+                "collection": collection_information_parsed.id
+            }).run(db_conn_mgr.conn)
+
+    return collection_information
 
 @router.get(
     "/{id}/info",
@@ -81,12 +80,11 @@ def new(
     response_model_exclude_unset=True,
     description="Gets information about a collection."
 )
-def info(
+async def info(
     id: str,
     user: Optional[UserBase] = Depends(auth_optional_dependency)
 ):
-    with get_conn() as conn:
-        collection_information = r.table("collections").get(str(id)).run(conn)
+    collection_information = await r.table("collections").get(id).run(db_conn_mgr.conn)
     if not collection_information:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     
@@ -105,37 +103,36 @@ def info(
     response_model_exclude_unset=True,
     description="Gets the files in a collection."
 )
-def files(
+async def files(
     id: str,
     limit: Optional[int] = Body(None, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from."),
     user: Optional[UserBase] = Depends(auth_optional_dependency),
 ):
-    with get_conn() as conn:
-        collection_information = r.table("collections").get(id).run(conn)
-        if not collection_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
-        
-        collection_information_parsed = Collection.parse_obj(collection_information)
-        if not collection_information_parsed.private or compare_owner(collection_information_parsed, user):
-            filters = (r.row["collection"] == id)
+    collection_information = await r.table("collections").get(id).run(db_conn_mgr.conn)
+    if not collection_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    
+    collection_information_parsed = Collection.parse_obj(collection_information)
+    if not collection_information_parsed.private or compare_owner(collection_information_parsed, user):
+        filters = (r.row["collection"] == id)
 
-            if start_date:
-                filters = filters & (r.row["created"] < start_date)
+        if start_date:
+            filters = filters & (r.row["created"] < start_date)
 
-            query = r.table("files").filter(filters).order_by(r.desc("created"))
-            if limit:
-                query = query.limit(limit)
+        query = r.table("files").filter(filters).order_by(r.desc("created"))
+        if limit:
+            query = query.limit(limit)
 
-            accepted_files = []
-            for file_information in query.run(conn):
-                file_information_parsed = FileBase.parse_obj(file_information)
-                if not file_information_parsed.private or compare_owner(file_information_parsed, user):
-                    accepted_files.append(file_information_parsed)
+        accepted_files = []
+        for file_information in await query.run(db_conn_mgr.conn):
+            file_information_parsed = FileBase.parse_obj(file_information)
+            if not file_information_parsed.private or compare_owner(file_information_parsed, user):
+                accepted_files.append(file_information_parsed)
 
-            return accepted_files
-        else:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+        return accepted_files
+    else:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
 
 class CollectionModifiableFields(str, Enum):
@@ -150,87 +147,85 @@ class CollectionModifiableFields(str, Enum):
     status_code=status.HTTP_204_NO_CONTENT,
     description="Modifies an existing collection."
 )
-def modify(
+async def modify(
     id: str,
     field: CollectionModifiableFields = Body(..., description="Data field to modify for the collection."),
     data: Union[bool, str] = Body(..., description="Data given to the `field`."),
     user: UserBase = Depends(auth_required_dependency)
 ):
-    with get_conn() as conn:
-        query = r.table("collections").get(id)
+    query = r.table("collections").get(id)
 
-        collection_information = query.run(conn)
-        if not collection_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
+    collection_information = await query.run(db_conn_mgr.conn)
+    if not collection_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-        collection_information_parsed = Collection.parse_obj(collection_information)
-        if not compare_owner(collection_information_parsed, user):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    collection_information_parsed = Collection.parse_obj(collection_information)
+    if not compare_owner(collection_information_parsed, user):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-        if field == CollectionModifiableFields.description:
-            query.update({
-                "description": str(data)
-            }).run(conn)
-        elif field == CollectionModifiableFields.private:
-            query.update({
-                "private": handle_str2bool(data)
-            }).run(conn)
-        elif field == CollectionModifiableFields.hidden:
-            query.update({
-                "hidden": handle_str2bool(data)
-            }).run(conn)
-        elif field == CollectionModifiableFields.add_file:
-            if not r.table("files").get_all(str(data)).count().eq(1).run(conn):
-                raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {data}")
-            r.table("files").get(str(data)).update({
-                "collection": id
-            }).run(conn)
-        elif field == CollectionModifiableFields.remove_file:
-            if r.table("files").get_all(str(data)).count().eq(1).run(conn):
-                r.table("files").get(str(data)).update({
-                    "collection": r.literal()
-                }).run(conn)
+    if field == CollectionModifiableFields.description:
+        await query.update({
+            "description": str(data)
+        }).run(db_conn_mgr.conn)
+    elif field == CollectionModifiableFields.private:
+        await query.update({
+            "private": handle_str2bool(data)
+        }).run(db_conn_mgr.conn)
+    elif field == CollectionModifiableFields.hidden:
+        await query.update({
+            "hidden": handle_str2bool(data)
+        }).run(db_conn_mgr.conn)
+    elif field == CollectionModifiableFields.add_file:
+        if not await r.table("files").get_all(str(data)).count().eq(1).run(db_conn_mgr.conn):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"File ID not found: {data}")
+        await r.table("files").get(str(data)).update({
+            "collection": id
+        }).run(db_conn_mgr.conn)
+    elif field == CollectionModifiableFields.remove_file:
+        if await r.table("files").get_all(str(data)).count().eq(1).run(db_conn_mgr.conn):
+            await r.table("files").get(str(data)).update({
+                "collection": r.literal()
+            }).run(db_conn_mgr.conn)
 
 @router.delete(
     "/{id}/delete",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Deletes a collection. (and optionally, its files)"
 )
-def delete(
+async def delete(
     id: str,
     delete_files: bool = Query(False, description="Delete files in the collection too."),
     user: UserBase = Depends(auth_required_dependency)
 ):
-    with get_conn() as conn:
-        query = r.table("collections").get(id)
+    query = r.table("collections").get(id)
 
-        collection_information = query.run(conn)
-        if not collection_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
+    collection_information = await query.run(db_conn_mgr.conn)
+    if not collection_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-        collection_information_parsed = Collection.parse_obj(collection_information)
-        if not compare_owner(collection_information_parsed, user):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
-        
-        query.delete().run(conn)
+    collection_information_parsed = Collection.parse_obj(collection_information)
+    if not compare_owner(collection_information_parsed, user):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    
+    await query.delete().run(db_conn_mgr.conn)
 
-        files = r.table("files").filter(r.row["collection"] == id).run(conn)
-        for file in files:
-            file_information_parsed = FileInDB.parse_obj(file)
-            if compare_owner(file_information_parsed, user):
-                file_query = r.table("files").get(file_information_parsed.id)
-                if delete_files:
-                    file_query.delete().run(conn)
-                    file_path = Path(FILES_PATH, file_information_parsed.file)
-                    if file_path.exists():
-                        file_path.unlink()
-                    thumb_path = Path(THUMBS_PATH, file_information_parsed.file)
-                    if thumb_path.exists():
-                        thumb_path.unlink()
-                else:
-                    file_query.update({
-                        "collection": r.literal()
-                    }).run(conn)
+    files = await r.table("files").filter(r.row["collection"] == id).run(db_conn_mgr.conn)
+    for file in files:
+        file_information_parsed = FileInDB.parse_obj(file)
+        if compare_owner(file_information_parsed, user):
+            file_query = r.table("files").get(file_information_parsed.id)
+            if delete_files:
+                await file_query.delete().run(db_conn_mgr.conn)
+                file_path = Path(FILES_PATH, file_information_parsed.file)
+                if file_path.exists():
+                    file_path.unlink()
+                thumb_path = Path(THUMBS_PATH, file_information_parsed.file)
+                if thumb_path.exists():
+                    thumb_path.unlink()
+            else:
+                await file_query.update({
+                    "collection": r.literal()
+                }).run(db_conn_mgr.conn)
 
 @router.get(
     "/{id}/embed",
@@ -238,26 +233,25 @@ def delete(
     name="embed_collection",
     description="Gets embed for a collection."
 )
-def embed(
+async def embed(
     request: Request,
     id: str
 ):
-    with get_conn() as conn:
-        collection_information = r.table("collections").get(id).run(conn)
-        if not collection_information:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
+    collection_information = await r.table("collections").get(id).run(db_conn_mgr.conn)
+    if not collection_information:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-        collection_information_parsed = Collection.parse_obj(collection_information)
-        if collection_information_parsed.private:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    collection_information_parsed = Collection.parse_obj(collection_information)
+    if collection_information_parsed.private:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
-        files_parsed = []
-        files = r.table("files").filter((r.row["collection"] == id) & ~r.row["private"]).order_by(r.desc("created")).run(conn)
-        for file in files:
-            files_parsed.append(FileBase.parse_obj(file))
+    files_parsed = []
+    files = await r.table("files").filter((r.row["collection"] == id) & ~r.row["private"]).order_by(r.desc("created")).run(db_conn_mgr.conn)
+    for file in files:
+        files_parsed.append(FileBase.parse_obj(file))
 
-        return templates.TemplateResponse("embed_collection.html", {
-            "request": request,
-            "collection": collection_information_parsed,
-            "files": files_parsed
-        })
+    return templates.TemplateResponse("embed_collection.html", {
+        "request": request,
+        "collection": collection_information_parsed,
+        "files": files_parsed
+    })

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, Query
 
 from ..common.auth import auth_optional_dependency
-from ..common.db import get_conn, r
+from ..common.db import db_conn_mgr, r
 from ..modals.collection import Collection
 from ..modals.file import FileBase
 from ..modals.user import UserBase
@@ -20,7 +20,7 @@ router = APIRouter(
     response_model_exclude_unset=True,
     description="Searches for files."
 )
-def search_files(
+async def search_files(
     nsfw: bool = Query(False),
     description: str = Body(..., description="Description to search for."),
     limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
@@ -47,8 +47,7 @@ def search_files(
     if limit:
         query = query.limit(limit)
 
-    with get_conn() as conn:
-        return query.run(conn)
+    return await query.run(db_conn_mgr.conn)
 
 @router.post(
     "/collections",
@@ -56,7 +55,7 @@ def search_files(
     response_model_exclude_unset=True,
     description="Searches for collections."
 )
-def search_collections(
+async def search_collections(
     description: str = Body(..., description="Description to search for."),
     limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from."),
@@ -79,8 +78,7 @@ def search_collections(
     if limit:
         query = query.limit(limit)
 
-    with get_conn() as conn:
-        return query.run(conn)
+    return await query.run(db_conn_mgr.conn)
 
 @router.post(
     "/users",
@@ -88,7 +86,7 @@ def search_collections(
     response_model_exclude_unset=True,
     description="Searches for users."
 )
-def search_users(
+async def search_users(
     username: str = Body(..., description="Username to search for."),
     limit: Optional[int] = Body(None, ge=1, description="Limit search results."),
     start_date: Optional[datetime] = Body(None, description="Date to start searching from.")
@@ -104,5 +102,4 @@ def search_users(
     if limit:
         query = query.limit(limit)
 
-    with get_conn() as conn:
-        return query.run(conn)
+    return await query.run(db_conn_mgr.conn)

@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, status
 
-from ..common.db import get_conn, r
+from ..common.db import r, db_conn_mgr
 from ..modals.file import FileBase
 from ..modals.collection import Collection
 
@@ -18,18 +18,17 @@ router = APIRouter(
     response_model_exclude_unset=True,
     description="Gets the latest publicly uploaded files."
 )
-def latest_files(
+async def latest_files(
     nsfw: bool = Query(True),
     limit: int = Body(..., ge=1, description="Limit file results."),
     start_date: Optional[datetime] = Body(None, description="Date to start returning results from.")
 ):
-    with get_conn() as conn:
-        filters = (~r.row["private"]) & (~r.row["hidden"])
-        if not nsfw:
-            filters = filters & (~r.row["nsfw"])
-        if start_date:
-            filters = filters & (r.row["created"] < start_date)
-        return r.table("files").filter(filters).order_by(r.desc("created")).limit(limit).run(conn)
+    filters = (~r.row["private"]) & (~r.row["hidden"])
+    if not nsfw:
+        filters = filters & (~r.row["nsfw"])
+    if start_date:
+        filters = filters & (r.row["created"] < start_date)
+    return await r.table("files").filter(filters).order_by(r.desc("created")).limit(limit).run(db_conn_mgr.conn)
 
 @router.get(
     "/files/popular",
@@ -37,14 +36,13 @@ def latest_files(
     response_model_exclude_unset=True,
     description="Get 10 most popular publicly uploaded files."
 )
-def popular(
+async def popular(
     nsfw: bool = Query(True)
 ):
     filters = (~r.row["private"]) & (~r.row["hidden"])
     if not nsfw:
         filters = filters & (~r.row["nsfw"])
-    with get_conn() as conn:
-        return r.table("files").filter(filters).order_by(r.desc("views")).limit(10).run(conn)
+    return await r.table("files").filter(filters).order_by(r.desc("views")).limit(10).run(db_conn_mgr.conn)
 
 @router.get(
     "/files/random",
@@ -52,15 +50,14 @@ def popular(
     response_model_exclude_unset=True,
     description="Gets a random public file."
 )
-def random(
+async def random(
     nsfw: bool = Query(False, description="Return NSFW file?")
 ):
     filters = (~r.row["private"]) & (~r.row["hidden"])
     if not nsfw:
         filters = filters & (~r.row["nsfw"])
 
-    with get_conn() as conn:
-        file_information = r.table("files").filter(filters).sample(1).run(conn)
+    file_information = await r.table("files").filter(filters).sample(1).run(conn)
 
     if not file_information or file_information[0] == []:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -73,12 +70,11 @@ def random(
     response_model_exclude_unset=True,
     description="Gets the latest 10 public collections."
 )
-def latest_collections(
+async def latest_collections(
     limit: int = Body(..., ge=1, description="Limit collection results."),
     start_date: Optional[datetime] = Body(None, description="Date to start returning results from.")
 ):
-    with get_conn() as conn:
-        filters = (~r.row["private"]) & (~r.row["hidden"])
-        if start_date:
-            filters = filters & (r.row["created"] < start_date)
-        return r.table("collections").filter(filters).order_by(r.desc("created")).limit(limit).run(conn)
+    filters = (~r.row["private"]) & (~r.row["hidden"])
+    if start_date:
+        filters = filters & (r.row["created"] < start_date)
+    return await r.table("collections").filter(filters).order_by(r.desc("created")).limit(limit).run(db_conn_mgr.conn)

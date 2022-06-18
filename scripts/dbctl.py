@@ -22,6 +22,12 @@ arg_parser.add_argument(
     nargs="?",
     help="The data provided to the command (optional)"
 )
+arg_parser.add_argument(
+    "data2",
+    action="store",
+    nargs="?",
+    help="The data provided to the command (optional)"
+)
 
 arg_parsed = arg_parser.parse_args()
 
@@ -41,6 +47,10 @@ with get_conn(user=server_config.iamages_db_user, password=server_config.iamages
         pprint(r.table("users").get(arg_parsed.data).run(conn))
     elif arg_parsed.command == "getcollection":
         pprint(r.table("collections").get(arg_parsed.data).run(conn))
+    elif arg_parsed.command == "chownfile":
+        r.table("files").get(arg_parsed.data).update({
+            "owner": arg_parsed.data2
+        }).run(conn)
     elif arg_parsed.command == "deletefile":
         query = r.table("files").get(arg_parsed.data)
         file_information = query.run(conn)

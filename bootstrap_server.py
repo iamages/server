@@ -1,7 +1,4 @@
-import argparse
-from click.decorators import argument
-import uvicorn 
-from server.main import app
+import uvicorn
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
