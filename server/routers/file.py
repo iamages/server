@@ -1,3 +1,6 @@
+import functools
+from asyncio import get_running_loop
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from enum import Enum
 from mimetypes import guess_extension
@@ -7,12 +10,11 @@ from shutil import copyfile
 from tempfile import NamedTemporaryFile, TemporaryFile
 from traceback import print_exc
 from typing import IO, Optional, Union
-from urllib.request import urlopen
-from fastapi.param_functions import Query
 
+import httpx
 import shortuuid
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, Form,
-                     HTTPException, Request, UploadFile, status)
+                     HTTPException, Query, Request, UploadFile, status)
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from PIL import Image
 from pydantic import AnyHttpUrl, BaseModel, Field, Json
@@ -72,6 +74,8 @@ def save_img(fp: IO, path: Path, mime: str) -> tuple[int]:
         img.save(**save_args)
         return img.size
 
+loop = get_running_loop()
+pool = ThreadPoolExecutor()
 router = APIRouter(
     prefix="/file",
     tags=["file"]
@@ -108,14 +112,16 @@ async def new_upload(
         if real_file_size > server_config.iamages_max_size:
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
-    new_file_name = shortuuid.uuid() + guess_extension(upload_file.content_type)
+    id: str = shortuuid.uuid()
+    new_file_name = id + guess_extension(upload_file.content_type)
     new_file_path = Path(FILES_PATH, new_file_name)
     if new_file_path.exists():
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
-    file_dimensions = save_img(upload_file.file, new_file_path, upload_file.content_type)
+
+    file_dimensions = await loop.run_in_executor(pool, functools.partial(save_img, fp=upload_file.file, path=new_file_path, mime=upload_file.content_type))
 
     file_information_parsed = FileInDB(
-        id=shortuuid.uuid(),
+        id=id,
         description=info.description,
         nsfw=info.nsfw,
         private=False,
@@ -168,32 +174,37 @@ async def new_websave(
     file_dimensions = (0, 0)
     file_mime = ""
 
+    id = None
+
     try:
-        with urlopen(info.upload_url) as fsrc, TemporaryFile() as fdst:
-            file_mime = fsrc.headers["Content-Type"]
+        fdst = TemporaryFile()
+        async with httpx.AsyncClient(http2=True) as client:
+            async with client.stream("GET", info.upload_url) as response:
+                file_mime = response.headers["Content-Type"]
 
-            if not file_mime in server_config.iamages_accept_mimes:
-                raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+                if not file_mime in server_config.iamages_accept_mimes:
+                    raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
-            new_file_name = shortuuid.uuid() + guess_extension(file_mime)
-            new_file_path = Path(FILES_PATH, new_file_name)
-            if new_file_path.exists():
-                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
+                real_file_size = 0
+                async for chunk in response.aiter_raw():
+                    real_file_size += len(chunk)
+                    if real_file_size > server_config.iamages_max_size:
+                        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+                    fdst.write(chunk)
 
-            real_file_size = 0
-            for chunk in fsrc:
-                real_file_size += len(chunk)
-                if real_file_size > server_config.iamages_max_size:
-                    raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-                fdst.write(chunk)
+        id = shortuuid.uuid()
+        new_file_name = id + guess_extension(file_mime)
+        new_file_path = Path(FILES_PATH, new_file_name)
+        if new_file_path.exists():
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            file_dimensions = save_img(fdst, new_file_path, file_mime)
+        file_dimensions = await loop.run_in_executor(pool, functools.partial(save_img, fp=fdst, path=new_file_path, mime=file_mime))
     except:
         print_exc()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     file_information_parsed = FileInDB(
-        id=shortuuid.uuid(),
+        id=id,
         description=info.description,
         nsfw=info.nsfw,
         private=False,

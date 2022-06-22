@@ -1,1 +1,1 @@
-IAMAGES_STORAGE_DIR=test_storage uvicorn server.main:app --reload
+uvicorn server.main:app --reload

@@ -16,6 +16,7 @@ python-multipart = "*"
 jinja2 = "*"
 setproctitle = "*"
 shortuuid = "*"
+httpx = {extras = ["brotli", "http2"], version = "*"}
 
 [dev-packages]
 pyinstaller = "*"
