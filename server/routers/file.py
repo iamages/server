@@ -74,7 +74,6 @@ def save_img(fp: IO, path: Path, mime: str) -> tuple[int]:
         img.save(**save_args)
         return img.size
 
-loop = get_running_loop()
 pool = ThreadPoolExecutor()
 router = APIRouter(
     prefix="/file",
@@ -118,7 +117,7 @@ async def new_upload(
     if new_file_path.exists():
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    file_dimensions = await loop.run_in_executor(pool, functools.partial(save_img, fp=upload_file.file, path=new_file_path, mime=upload_file.content_type))
+    file_dimensions = await get_running_loop().run_in_executor(pool, functools.partial(save_img, fp=upload_file.file, path=new_file_path, mime=upload_file.content_type))
 
     file_information_parsed = FileInDB(
         id=id,
@@ -198,7 +197,7 @@ async def new_websave(
         if new_file_path.exists():
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        file_dimensions = await loop.run_in_executor(pool, functools.partial(save_img, fp=fdst, path=new_file_path, mime=file_mime))
+        file_dimensions = await get_running_loop().run_in_executor(pool, functools.partial(save_img, fp=fdst, path=new_file_path, mime=file_mime))
     except:
         print_exc()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY)
