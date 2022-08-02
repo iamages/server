@@ -1,5 +1,5 @@
-__version__ = "3.2.0"
-__copyright__ = "© jkelol111 et al 2021-present"
+__version__ = "4.0.0"
+__copyright__ = "© jkelol111 et al 2022-present"
 
 from getpass import getpass
 from tqdm import tqdm
