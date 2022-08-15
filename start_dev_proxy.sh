@@ -1,1 +1,0 @@
-traefik --configFile=traefik.toml --accessLog=true

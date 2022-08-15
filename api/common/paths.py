@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .config import server_config
+from .settings import server_config
 
 if not server_config.iamages_storage_dir.exists():
     server_config.iamages_storage_dir.mkdir()
