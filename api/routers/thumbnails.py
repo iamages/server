@@ -1,23 +1,33 @@
-from mimetypes import guess_extension
 from os import fstat
 from secrets import compare_digest
 from tempfile import NamedTemporaryFile
+from traceback import print_exception
 
-import bson
-import cv2
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
+from fastapi import (APIRouter, Depends, HTTPException,
                      Request, status)
 from fastapi.responses import RedirectResponse, StreamingResponse
+from PIL import Image as PillowImage
 
-from ..common.security import get_optional_user
 from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
+from ..common.security import get_optional_user
 from ..models.default import PyObjectId
-from ..models.images import Image, ImageMetadata
+from ..models.images import ImageInDB
 from ..models.users import User
 
+def set_unavailable(id: PyObjectId):
+    db_images.update_one({
+        "_id": id
+    }, {
+        "$set": {
+            "thumbnail.is_computing": False
+        },
+        "$inc": {
+            "thumbnail.is_unavailable": True
+        }
+    })
 
-async def create_thumbnail(id: PyObjectId, content_type: str):
-    await db_images.update_one({
+def create_thumbnail(id: PyObjectId):
+    db_images.update_one({
         "_id": id
     }, {
         "$set": {
@@ -25,97 +35,93 @@ async def create_thumbnail(id: PyObjectId, content_type: str):
         }
     })
 
-    with (
-        NamedTemporaryFile() as original,
-        NamedTemporaryFile() as thumbnail
-    ):
-        await fs_images.download_to_stream(id, original)
+    try:
+        with NamedTemporaryFile() as thumbnail:
+            image_grid_out = fs_images.open_download_stream(id)
+            content_type = image_grid_out.metadata["content_type"]
 
-        if content_type == "image/gif":
-            cap = cv2.VideoCapture(original.name)
-            ret, image = cap.read()
-            if ret:
-                thumb = cv2.resize(image, (600, 600))
-                cv2.imwrite(thumbnail.name, thumb)
-            cap.release()
-            
-        else:
-            image = cv2.imread(original.name)
-            thumb = cv2.resize(image, (600, 600))
-            cv2.imwrite(thumbnail.name, thumb)
+            with PillowImage.open(image_grid_out) as image:
+                image.resize((512, 512))
+                if content_type == "image/gif":
+                    image.save(thumbnail, "gif", save_all=True)
+                else:
+                    image.save(thumbnail, content_type.split("/")[1])
 
-        if fstat(original.fileno()).st_size > fstat(thumbnail.fileno()).st_size:
-            await db_images.update_one({
-                "_id": id
-            }, {
-                "$set": {
-                    "thumbnail.is_computing": False
-                },
-                "$inc": {
-                    "thumbnail.compute_attempts": 1
-                }
-            })
-        else:
-            await fs_thumbnails.upload_from_stream_with_id(
-                id,
-                f"{id}{guess_extension(content_type)}",
-                thumbnail,
-                metadata={
-                    "contentType": content_type
-                }
-            )
+            if image_grid_out.length > fstat(thumbnail.fileno()).st_size:
+                thumbnail.seek(0)
+                fs_thumbnails.upload_from_stream_with_id(
+                    id,
+                    image_grid_out.filename,
+                    thumbnail,
+                    metadata={
+                        "content_type": content_type
+                    }
+                )
+            set_unavailable(id)
+    except Exception as e:
+        set_unavailable(id)
+        raise e
 
 router = APIRouter(prefix="/thumbnails")
 
 @router.get(
-    "/{id}.{extension}",
+    "/{id}",
     response_class=StreamingResponse,
     response_description="Thumbnail.",
     responses={
-        307: {
-            "description": "Thumbnail isn't ready yet."
+        308: {
+            "description": "Thumbnail isn't available for this image."
         },
         401: {
             "description": "You don't have permission to view this thumbnail."
-        },
-        403: {
-            "description": "Thumbnails are unavailable for this image."
         },
         404: {
             "description": "Thumbnail doesn't exist."
         }
     }
 )
-async def get_thumbnail(
+def get_thumbnail(
     id: PyObjectId,
-    extension: str,
-    background_tasks: BackgroundTasks,
     request: Request,
     user: User | None = Depends(get_optional_user)
 ):
-    image_dict = await db_images.find_one({
+    image_dict = db_images.find_one({
         "_id": id
     })
 
     if not image_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Image doesn't exist.")
 
-    image = Image.parse_obj(image_dict)
+    image = ImageInDB.parse_obj(image_dict)
 
-    if image.is_locked:
+    if image.lock.is_locked:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Thumbnails are unavailable for this image.")
 
-    if image.is_private and not compare_digest(image.owner, user.username):
+    if image.is_private and (not user or not compare_digest(image.owner, user.username)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this thumbnail.")
 
-    image_metadata = ImageMetadata.parse_obj(bson.decode(image.metadata))
+    if image.thumbnail.is_computing:
+        return RedirectResponse(request.url_for("get_image_file", id=id), headers={
+             "X-Iamages-Image-Private": str(image.is_private)
+        })
 
-    if not image.thumbnail.is_computing and image.thumbnail.compute_attempts >= 1:
-        background_tasks.add_task(create_thumbnail, id=id, content_type=image_metadata.content_type)
-        return RedirectResponse(request.get_url("image", id=id, extension=extension))
+    if not image.thumbnail.is_unavailable:
+        try:
+            create_thumbnail(id)
+        except Exception as e:
+            print_exception(e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not create thumbnail for this image.")
 
-    file = await fs_thumbnails.open_download_stream(id)
-    return StreamingResponse(yield_grid_file(file), media_type=file.content_type, headers={
-        "Content-Length": file.length
-    })
+    try:
+        file = fs_thumbnails.open_download_stream(id)
+        return StreamingResponse(yield_grid_file(file), media_type=file.content_type, headers={
+            "Content-Length": str(file.length)
+        })
+    except Exception as e: 
+        if e.__class__.__name__ != "NoFile":
+            print_exception(e)
+        return RedirectResponse(request.url_for("get_image_file", id=id), status.HTTP_308_PERMANENT_REDIRECT, headers={
+            "X-Iamages-Image-Private": str(image.is_private)
+        })
+
 

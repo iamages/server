@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routers import collections, images, legal, thumbnails, users
+from .routers import collections, feeds, images, legal, thumbnails, users
 
 app = FastAPI(
     title="Iamages",
@@ -28,6 +28,7 @@ app.include_router(images.router)
 app.include_router(thumbnails.router)
 app.include_router(collections.router)
 app.include_router(users.router)
+app.include_router(feeds.router)
 app.include_router(legal.router)
 
 app.add_middleware(

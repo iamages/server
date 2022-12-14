@@ -1,14 +1,21 @@
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
+from pymongo import MongoClient
+from gridfs import GridFSBucket, GridOut
 from .settings import api_settings
 
-db = AsyncIOMotorClient(api_settings.db_url, tz_aware=True).iamages
+db = MongoClient(
+    api_settings.db_url,
+    tz_aware=True,
+    uuidRepresentation="standard"
+).iamages
 db_images = db.images
-fs_images = AsyncIOMotorGridFSBucket(db, bucket_name="fs_images")
-fs_thumbnails = AsyncIOMotorGridFSBucket(db, bucket_name="fs_thumbnails")
+db_collections = db.collections
+db_users = db.users
+fs_images = GridFSBucket(db, bucket_name="fs_images")
+fs_thumbnails = GridFSBucket(db, bucket_name="fs_thumbnails")
 
-async def yield_grid_file(grid_out):
+def yield_grid_file(grid_out: GridOut):
     while True:
-        chunk = await grid_out.readchunk()
+        chunk = grid_out.readchunk()
         if not chunk:
             break
         yield chunk
