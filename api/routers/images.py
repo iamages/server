@@ -1,16 +1,16 @@
 from base64 import b64decode, b64encode
 from io import BytesIO
 from mimetypes import guess_extension
+from secrets import compare_digest
 from typing import BinaryIO
 from uuid import UUID, uuid4
-from secrets import compare_digest
 
 import magic
 import orjson
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from fastapi import (APIRouter, Depends, Form, Header, HTTPException, Query,
-                     UploadFile, status, Body)
+from fastapi import (APIRouter, Body, Depends, Form, Header, HTTPException,
+                     UploadFile, status)
 from fastapi.responses import Response, StreamingResponse
 from gridfs.errors import NoFile as GridFSNoFile
 from passlib.hash import argon2
@@ -21,9 +21,10 @@ from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
 from ..common.security import get_optional_user, get_user
 from ..common.settings import api_settings
 from ..models.default import PyObjectId
-from ..models.images import (Image, ImageInDB, ImageInformationType,
-                             ImageMetadata, ImageUpload, Lock, LockVersion,
-                             Metadata, Thumbnail, EditableImageInformation, ImageEditResponse)
+from ..models.images import (EditableImageInformation, Image,
+                             ImageEditResponse, ImageInDB, ImageMetadata,
+                             ImageUpload, Lock, LockVersion, Metadata,
+                             Thumbnail)
 from ..models.users import User
 
 SUPPORTED_MIME_TYPES = [
@@ -62,7 +63,8 @@ router = APIRouter(prefix="/images")
     "/",
     response_model=Image,
     response_model_by_alias=False,
-    response_model_exclude_unset=True
+    response_model_exclude_unset=True,
+    status_code=status.HTTP_201_CREATED
 )
 def upload_image(
     file: UploadFile,
@@ -96,7 +98,7 @@ def upload_image(
             real_content_type=mime if information.is_locked else None
         )
 
-        image_metadata_bytes = orjson.dumps(image_metadata.dict())
+        image_metadata_bytes = None
         nonce = None
         tag = None
 
@@ -104,6 +106,7 @@ def upload_image(
         salt = None
 
         if information.is_locked:
+            image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
             key, salt = hash_password(information.lock_key)
 
             nonce = get_random_bytes(12)
@@ -123,7 +126,7 @@ def upload_image(
             metadata=Metadata(
                 salt=salt,
                 nonce=nonce,
-                data=image_metadata_bytes,
+                data=image_metadata_bytes if information.is_locked else image_metadata,
                 tag=tag,
             )
         )
@@ -131,7 +134,12 @@ def upload_image(
         if user:
             image.owner = user.username
 
-        insert_result = db_images.insert_one(image.dict(by_alias=True, exclude_none=True, exclude={"created_on"}))
+        insert_result = db_images.insert_one(
+            image.dict(by_alias=True, exclude_none=True, exclude={
+                "created_on": ...,
+                "lock": {"upgradable": ...}
+            })
+        )
 
         with (
             PillowImage.new(original_file.mode, (width, height)) as new_file,
@@ -223,17 +231,7 @@ def get_image_file(
         headers=headers
     )
 
-@router.api_route(
-    "/{id}",
-    methods=["GET", "HEAD"],
-    response_model=Image,
-    response_model_by_alias=False
-)
-def get_image_information(
-    id: PyObjectId,
-    information_type: ImageInformationType = Query(ImageInformationType.public, alias="type"),
-    user: User | None = Depends(get_optional_user)
-):
+def get_image_in_db(id: PyObjectId, user: User | None) -> ImageInDB:
     image_dict = db_images.find_one({
         "_id": id
     })
@@ -246,18 +244,40 @@ def get_image_information(
     if image.is_private and (not user or image.owner != user.username):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this image.")
 
-    match information_type:
-        case ImageInformationType.public:
-            return image
-        case ImageInformationType.private:
-            headers = {
-                "Content-Length": str(len(image.metadata.data))
-            }
-            if image.lock.is_locked:
-                headers["X-Iamages-Lock-Salt"] = b64encode(image.metadata.salt).decode("utf-8")
-                headers["X-Iamages-Lock-Nonce"] = b64encode(image.metadata.nonce).decode("utf-8")
-                headers["X-Iamages-Lock-Tag"] = b64encode(image.metadata.tag).decode("utf-8")
-            return Response(image.metadata.data, media_type="application/octet-stream", headers=headers)
+    return image
+
+@router.api_route(
+    "/{id}",
+    methods=["GET", "HEAD"],
+    response_model=Image,
+    response_model_by_alias=False,
+    response_model_exclude_none=True
+)
+def get_image_information(
+    id: PyObjectId,
+    user: User | None = Depends(get_optional_user)
+):
+    return get_image_in_db(id, user)
+
+@router.get(
+    "/{id}/metadata",
+    response_model=ImageMetadata,
+    response_model_exclude_none=True
+)
+def get_image_metadata(
+    id: PyObjectId,
+    user: User | None = Depends(get_optional_user)
+):
+    image = get_image_in_db(id, user)
+    if image.lock.is_locked:
+        return Response(image.metadata.data, media_type="application/octet-stream", headers={
+            "Content-Length": str(len(image.metadata.data)),
+            "X-Iamages-Lock-Salt": b64encode(image.metadata.salt).decode("utf-8"),
+            "X-iamages-Lock-Nonce": b64encode(image.metadata.nonce).decode("utf-8"),
+            "X-Iamages-Lock-Tag": b64encode(image.metadata.tag).decode("utf-8")
+        })
+    return image.metadata.data
+
 
 @router.delete(
     "/{id}",

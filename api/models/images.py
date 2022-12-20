@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field, constr, root_validator
 
 from .default import DefaultModel, PyObjectId
 
-
 class ImageMetadata(BaseModel):
     description: constr(min_length=1, max_length=255)
     width: int
@@ -22,7 +21,7 @@ class Thumbnail(BaseModel):
 class Metadata(BaseModel):
     salt: bytes | None
     nonce: bytes | None
-    data: bytes
+    data: bytes | ImageMetadata
     tag: bytes | None
 
 
@@ -35,6 +34,12 @@ class Lock(BaseModel):
     version: LockVersion | None
     upgradable: bool | None
 
+    @root_validator
+    def get_upgradable(cls, values) -> dict:
+        if values["version"]:
+            values["upgradable"] = values["version"] < LockVersion.aes128gcm_argon2
+        return values
+
 
 class Image(DefaultModel):
     created_on: datetime | None
@@ -43,7 +48,6 @@ class Image(DefaultModel):
     content_type: str
     lock: Lock
     thumbnail: Thumbnail | None
-    collection: PyObjectId | None
 
     @root_validator
     def get_created_on(cls, values) -> dict:
@@ -52,6 +56,7 @@ class Image(DefaultModel):
 
 class ImageInDB(Image):
     metadata: Metadata
+    collections: list[PyObjectId] = []
     ownerless_key: UUID | None
 
 
@@ -60,11 +65,6 @@ class ImageUpload(BaseModel):
     is_private: bool
     is_locked: bool
     lock_key: constr(min_length=3) | None
-
-
-class ImageInformationType(str, Enum):
-    public = "public"
-    private = "private"
 
 class EditableImageInformation(str, Enum):
     is_private = "is_private"

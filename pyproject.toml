@@ -22,7 +22,7 @@ python-jose = {extras = ["pycryptodome"], version = "^3.3.0"}
 [tool.poetry.dev-dependencies]
 
 [tool.poetry.group.dev.dependencies]
-poetryup = "^0.12.5"
+poetryup = "^0.12.7"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
