@@ -6,15 +6,11 @@ from pydantic import BaseModel, root_validator, constr
 
 from .default import DefaultModel, PyObjectId
 
-
-class CollectionMetadata(BaseModel):
-    description: constr(min_length=1, max_length=255)
-
 class Collection(DefaultModel):
     created_on: Optional[datetime]
     owner: Optional[str]
     is_private: bool
-    metadata: CollectionMetadata
+    description: constr(min_length=1, max_length=255)
 
     @root_validator
     def get_created_date(cls, values) -> dict:

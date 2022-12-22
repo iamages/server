@@ -9,17 +9,14 @@
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Iamages">
     <meta property="og:title" content="{{collection.description}}">
-    <meta property="og:description" content="{{ files|length }} files in this Collection.">
-    <meta property="og:url" content="{{ url_for('embed_collection', id=collection.id) }}">
-    {% if collection.owner -%}
-    <meta property="article:author" content="{{ url_for('embed_user', username=collection.owner) }}">
-    {%- endif %}
-    <meta property="article:published_time" content="{{collection.created}}">
+    <meta property="og:description" content="{{ images|length }} image(s) in this Collection.">
+    <meta property="og:url" content="{{ url_for('get_collection_embed', id=collection.id) }}">
+    <meta property="article:published_time" content="{{collection.created_on}}">
     <meta name="twitter:card" content="summary">
-    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument=iamages://view?type=collection&id={{ collection.id }}">
+    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument=iamages://collections/{{ collection.id }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#F1965B">
-    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages-icon.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
   </head>
   <body>
@@ -28,10 +25,10 @@
         <nav class="navbar">
           <div class="container">
             <div class="navbar-brand">
-              <a class="navbar-item" href="{{ url_for('embed_collection', id=collection.id) }}">
-                <img src="{{ url_for('static', path='/icons/iamages-icon.png') }}" width="28" height="28">
+              <a class="navbar-item" href="{{ url_for('get_collection_embed', id=collection.id) }}">
+                <img src="{{ url_for('static', path='/icons/iamages.png') }}" width="28" height="28">
               </a>
-              <a class="navbar-item" href="{{ url_for('embed_collection', id=collection.id) }}">
+              <a class="navbar-item" href="{{ url_for('get_collection_embed', id=collection.id) }}">
                 Embed Viewer&nbsp/&nbsp<b>{{collection.description}}</b>
               </a>
             </div>
@@ -42,22 +39,20 @@
         <div class="container has-text-centered">
           <div class="columns is-centered is-vcentered">
             <div class="column is-half">
-              {% for file in files -%}
+              {% for image in images -%}
                 <div class="card">
                   <div class="card-image">
-                    <figure class="image">
-                      <img src="{{ url_for('thumb', id=file.id) }}" alt="Thumbnail for: {{file.description}}">
+                    <figure class="imagese">
+                      <img src="{{ url_for('get_thumbnail', id=image.id) }}" alt="Thumbnail for: {{image.id}}">
                     </figure>
                   </div>
                   <div class="card-content has-text-left">
-                    {% if file.owner -%}
-                    <a class="has-text-weight-bold" href="{{ url_for('embed_user', username=file.owner) }}" target="_blank">
-                      {{ file.owner }}
-                    </a>
+                    {% if image.owner -%}
+                    <span class="has-text-weight-bold">{{image.owner}}</span>
                     {%- else %}
                     <span class="has-text-weight-bold">Anonymous</span>
                     {%- endif %}
-                    <a href="{{ url_for('embed_file', id=file.id) }}" target="_blank">{{ file.description }}</a>
+                    <a href="{{ url_for('get_image_embed', id=image.id) }}" target="_blank">TODO</a>
                   </div>  
                 </div>
                 <br>

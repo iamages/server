@@ -1,22 +1,37 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestFormStrict
 from jose import jwt
 from passlib.context import CryptContext
-from pydantic import conint
 from pymongo import DESCENDING
+from gridfs.errors import NoFile
 
-from ..common.db import db_collections, db_images, db_users
+from ..common.db import (db_collections, db_images, db_users, fs_images,
+                         fs_thumbnails)
 from ..common.security import (ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM,
                                get_user)
 from ..common.settings import api_settings
 from ..models.collections import Collection
-from ..models.default import PyObjectId
 from ..models.images import Image
+from ..models.pagination import Pagination
 from ..models.tokens import JWTModal, Token
 from ..models.users import User, UserInDB
-from ..models.pagination import Pagination
+
+def perform_user_delete(username: str):
+    db_users.delete_one({"_id": username})
+    image_ids = db_images.find({"owner": username}, {"_id": ...})
+    for image_id in image_ids:
+        db_images.delete_one({"_id": image_id})
+        try:
+            fs_images.delete({"_id": image_id})
+        except NoFile:
+            pass
+        try:
+            fs_thumbnails.delete({"_id": image_id})
+        except NoFile:
+            pass
+    db_collections.delete_many({"owner": username})
 
 crypt_context = CryptContext(schemes=["argon2"], deprecated=["auto"])
 router = APIRouter(prefix="/users")
@@ -56,6 +71,16 @@ def get_user_information(
     user: User = Depends(get_user)
 ):
     return user
+
+@router.delete(
+    "/",
+    status_code=status.HTTP_202_ACCEPTED
+)
+def delete_user(
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_user)
+):
+    background_tasks.add_task(perform_user_delete, username=user.username)
 
 @router.post(
     "/token",
@@ -111,8 +136,8 @@ def get_user_images(
             "$options": "i"
         }
     if pagination.last_id:
-        filters["$lt"] = {
-            "_id": pagination.last_id
+        filters["_id"] = {
+            "$lt": pagination.last_id
         }
     return list(db_images.find(filters).sort("_id", DESCENDING).limit(pagination.limit))
 
@@ -153,10 +178,10 @@ def get_user_collections(
         "owner": user.username
     }
     if pagination.query:
-        filters["metadata.description"] = pagination.query
+        filters["description"] = pagination.query
     if pagination.last_id:
-        filters["$lt"] = {
-            "_id": pagination.last_id
+        filters["_id"] = {
+            "$lt": pagination.last_id
         }
     return list(db_collections.find(filters).sort("_id", DESCENDING).limit(pagination.limit))
 

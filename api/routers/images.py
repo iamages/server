@@ -10,8 +10,8 @@ import orjson
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from fastapi import (APIRouter, Body, Depends, Form, Header, HTTPException,
-                     UploadFile, status)
-from fastapi.responses import Response, StreamingResponse
+                     UploadFile, status, Request)
+from fastapi.responses import Response, StreamingResponse, HTMLResponse
 from gridfs.errors import NoFile as GridFSNoFile
 from passlib.hash import argon2
 from PIL import Image as PillowImage
@@ -20,6 +20,7 @@ from pydantic import Json
 from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
 from ..common.security import get_optional_user, get_user
 from ..common.settings import api_settings
+from ..common.templates import templates
 from ..models.default import PyObjectId
 from ..models.images import (EditableImageInformation, Image,
                              ImageEditResponse, ImageInDB, ImageMetadata,
@@ -278,6 +279,19 @@ def get_image_metadata(
         })
     return image.metadata.data
 
+@router.get(
+    "/{id}/embed",
+    description="Presents the image in a webpage.",
+    response_class=HTMLResponse
+)
+def get_image_embed(
+    id: PyObjectId,
+    request: Request
+):
+    return templates.TemplateResponse("embed_image.html", {
+        "request": request,
+        "image": get_image_in_db(id, None)
+    })
 
 @router.delete(
     "/{id}",
@@ -353,14 +367,14 @@ def patch_image_information(
             if image.lock.is_locked and not lock_key:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No lock key provided for locked image.")
 
-            image_metadata_bytes = image.metadata.data
+            image_metadata = image.metadata.data
             if image.lock.is_locked:
                 cipher = AES.new(hash_password(lock_key, image.metadata.salt)[0], AES.MODE_GCM, nonce=image.metadata.nonce)
-                image_metadata_bytes = cipher.decrypt_and_verify(image_metadata_bytes, image.metadata.tag)
-
-            image_metadata = ImageMetadata.parse_raw(image_metadata_bytes)
+                image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image_metadata, image.metadata.tag))
             image_metadata.description = to
-            image_metadata_bytes = orjson.dumps(image_metadata.dict())
+
+            if image.lock.is_locked:
+                image_metadata = orjson.dumps(image_metadata.dict())
 
             salt = None
             nonce = None
@@ -370,12 +384,12 @@ def patch_image_information(
                 key, salt = hash_password(lock_key)
                 nonce = get_random_bytes(12)
                 cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-                image_metadata_bytes, tag = cipher.encrypt_and_digest(image_metadata_bytes)
+                image_metadata, tag = cipher.encrypt_and_digest(image_metadata)
 
             metadata_object = Metadata(
                 salt=salt,
                 nonce=nonce,
-                data=image_metadata_bytes,
+                data=image_metadata,
                 tag=tag
             )
 

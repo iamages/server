@@ -3,9 +3,9 @@ __copyright__ = "© jkelol111 et al 2021-present"
 
 from getpass import getpass
 
-from pymongo import MongoClient
+from pymongo import MongoClient, TEXT
 
-SUPPORTED_STORAGE_VER = 4
+from .models.db import SUPPORTED_STORAGE_VER, DatabaseVersionModel
 
 print(f"[Make Iamages Database {SUPPORTED_STORAGE_VER} - (C) jkelol111 et al. 2022-present]")
 print("")
@@ -29,6 +29,15 @@ db.command(
     pwd=getpass("New password for 'iamages' database user: "),
     roles=["readWrite"]
 )
+
+# Create indexes
+db_images = db.images
+db_images.create_index(("owner", TEXT), sparse=True)
+db_collections = db.collections
+db_collections.create_index(("owner", TEXT), sparse=True)
+
+# Add database version upgrade record.
+db.internal.insert_one(DatabaseVersionModel())
 
 print("")
 print("Et voila! The database and 'iamages' database user have been created.")
