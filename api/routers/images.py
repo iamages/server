@@ -4,6 +4,7 @@ from mimetypes import guess_extension
 from secrets import compare_digest
 from typing import BinaryIO
 from uuid import UUID, uuid4
+from base64 import b64encode
 
 import magic
 import orjson
@@ -11,10 +12,12 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from fastapi import (APIRouter, Body, Depends, Form, Header, HTTPException,
                      UploadFile, status, Request)
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse, HTMLResponse
 from gridfs.errors import NoFile as GridFSNoFile
 from passlib.hash import argon2
 from PIL import Image as PillowImage
+from PIL.ImageOps import exif_transpose
 from pydantic import Json
 
 from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
@@ -24,7 +27,7 @@ from ..common.templates import templates
 from ..models.default import PyObjectId
 from ..models.images import (EditableImageInformation, Image,
                              ImageEditResponse, ImageInDB, ImageMetadata,
-                             ImageUpload, Lock, LockVersion, Metadata,
+                             ImageUpload, Lock, LockVersion, ImageMetadataContainer,
                              Thumbnail)
 from ..models.users import User
 
@@ -124,7 +127,7 @@ def upload_image(
                 version=LockVersion.aes128gcm_argon2 if information.is_locked else None
             ),
             thumbnail=Thumbnail(),
-            metadata=Metadata(
+            metadata=ImageMetadataContainer(
                 salt=salt,
                 nonce=nonce,
                 data=image_metadata_bytes if information.is_locked else image_metadata,
@@ -142,16 +145,19 @@ def upload_image(
             })
         )
 
+        original_file_format = original_file.format
+        # Correct orientation
+        original_file = exif_transpose(original_file)
         with (
-            PillowImage.new(original_file.mode, (width, height)) as new_file,
+            PillowImage.new(original_file.mode, original_file.size) as new_file,
             BytesIO() as temporary
         ):
             new_file.putdata(original_file.getdata())
 
             if mime == "image/gif":
-                new_file.save(temporary, format=original_file.format, save_all=True)
+                new_file.save(temporary, format=original_file_format, save_all=True)
             else:
-                new_file.save(temporary, format=original_file.format)
+                new_file.save(temporary, format=original_file_format)
 
             gridfs_source = temporary.getvalue()
 
@@ -195,8 +201,9 @@ def upload_image(
 
     return Image(**image.dict())
 
-@router.get(
+@router.api_route(
     "/{id}/download",
+    methods=["GET", "HEAD"],
     response_class=StreamingResponse
 )
 def get_image_file(
@@ -288,9 +295,22 @@ def get_image_embed(
     id: PyObjectId,
     request: Request
 ):
-    return templates.TemplateResponse("embed_image.html", {
+    return templates.TemplateResponse("embed-image.html", {
         "request": request,
-        "image": get_image_in_db(id, None)
+        "image": jsonable_encoder(
+            get_image_in_db(id, None),
+            by_alias=False,
+            exclude_none=True,
+            exclude={
+                "lock": {
+                    "upgradable": ...
+                },
+                "collections": ...
+            },
+            custom_encoder={
+                bytes: lambda b: b64encode(b).decode("utf-8")
+            }
+        )
     })
 
 @router.delete(
@@ -314,7 +334,7 @@ def delete_image(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="No user token or ownerless key provided.")
         if not image.ownerless_key:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Image belongs to someone else.")
-        if not compare_digest(image.ownerless_key, ownerless_key):
+        if not compare_digest(str(image.ownerless_key), str(ownerless_key)):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Ownerless key doesn't match.")
     else:
         if not image.owner:
@@ -332,15 +352,23 @@ def delete_image(
         print(str(e))
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Couldn't delete image/thumbnail file.")
 
+def check_key_len(key: str) -> bytes:
+    key_bytes = b64decode(key)
+    if len(key_bytes) != 16:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Metadata lock key is not exactly 16 bytes.")
+    return key_bytes
+
 @router.patch(
     "/{id}",
-    response_model=ImageEditResponse
+    response_model=ImageEditResponse,
+    response_model_exclude_none=True
 )
 def patch_image_information(
     id: PyObjectId,
     change: EditableImageInformation = Body(...),
     to: bool | str = Body(...),
-    lock_key: str | None = Body(None),
+    metadata_lock_key: str | None = Body(None),
+    image_lock_key: str | None = Body(None),
     user: User = Depends(get_user)
 ):
     image_dict = db_images.find_one({"_id": id})
@@ -364,30 +392,28 @@ def patch_image_information(
         case EditableImageInformation.description:
             if type(to) != str:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="description requires a string 'to'.")
-            if image.lock.is_locked and not lock_key:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No lock key provided for locked image.")
+            if image.lock.is_locked and not metadata_lock_key:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No metadata lock key provided for locked image.")
 
             image_metadata = image.metadata.data
             if image.lock.is_locked:
-                cipher = AES.new(hash_password(lock_key, image.metadata.salt)[0], AES.MODE_GCM, nonce=image.metadata.nonce)
+                metadata_lock_key_bytes = check_key_len(metadata_lock_key)
+                cipher = AES.new(metadata_lock_key_bytes, AES.MODE_GCM, nonce=image.metadata.nonce)
                 image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image_metadata, image.metadata.tag))
             image_metadata.description = to
 
             if image.lock.is_locked:
                 image_metadata = orjson.dumps(image_metadata.dict())
 
-            salt = None
             nonce = None
             tag = None
             
             if image.lock.is_locked:
-                key, salt = hash_password(lock_key)
                 nonce = get_random_bytes(12)
-                cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+                cipher = AES.new(metadata_lock_key_bytes, AES.MODE_GCM, nonce=nonce)
                 image_metadata, tag = cipher.encrypt_and_digest(image_metadata)
 
-            metadata_object = Metadata(
-                salt=salt,
+            metadata_object = ImageMetadataContainer(
                 nonce=nonce,
                 data=image_metadata,
                 tag=tag
@@ -401,7 +427,7 @@ def patch_image_information(
             db_images.update_one({"_id": id}, update_dict)
             return ImageEditResponse()
         case EditableImageInformation.lock:
-            if image.lock.is_locked and not lock_key:
+            if image.lock.is_locked and (not metadata_lock_key or not image_lock_key):
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No lock key provided for locked image.")
             # Set a new lock key.
             if type(to) == str:
@@ -411,7 +437,7 @@ def patch_image_information(
                     # Re-encrypt existing image metadata by decrypting using lock_key
                     # and encrypting using to key.
                     cipher = AES.new(
-                        hash_password(lock_key, image.metadata.salt)[0],
+                        check_key_len(metadata_lock_key),
                         AES.MODE_GCM,
                         nonce=image.metadata.nonce
                     )
@@ -438,7 +464,7 @@ def patch_image_information(
                     # Re-encrypt existing image file by decrypting using lock_key
                     # and encrypting using to key.
                     cipher = AES.new(
-                        hash_password(lock_key, image_grid_out.metadata["salt"])[0],
+                        check_key_len(image_lock_key),
                         AES.MODE_GCM,
                         nonce=image_grid_out.metadata["nonce"]
                     )
@@ -460,18 +486,25 @@ def patch_image_information(
                             "nonce": nonce,
                             "tag": tag
                         })
+                    return ImageEditResponse(
+                        lock_version=LockVersion.aes128gcm_argon2
+                    )
                 else:
+                    image.metadata.data.real_content_type = image.content_type
                     # Encrypt image metadata
                     key, salt = hash_password(to)
                     nonce = get_random_bytes(12)
                     cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
 
-                    encrypted_image_metadata, tag = cipher.encrypt_and_digest(image.metadata.data)
+                    encrypted_image_metadata, tag = cipher.encrypt_and_digest(
+                        orjson.dumps(image.metadata.data.dict(exclude_none=True))
+                    )
 
                     db_images.update_one({
-                        "_id", id
+                        "_id": id
                     }, {
                         "$set": {
+                            "content_type": "application/octet-stream",
                             "metadata": {
                                 "salt": salt,
                                 "nonce": nonce,
@@ -483,7 +516,9 @@ def patch_image_information(
                                 "version": LockVersion.aes128gcm_argon2
                             }
                         },
-                        "$unset": "thumbnail"
+                        "$unset": {
+                            "thumbnail": None
+                        }
                     })
 
                     # Encrypt image file
@@ -507,17 +542,29 @@ def patch_image_information(
                             "tag": tag
                         }
                     )
-                    fs_thumbnails.delete(id)
-                return ImageEditResponse(lock_version=LockVersion.aes128gcm_argon2)
+                    try:
+                        fs_thumbnails.delete(id)
+                    except GridFSNoFile:
+                        pass
+                    except Exception as e:
+                        raise e
+                return ImageEditResponse(
+                    lock_version=LockVersion.aes128gcm_argon2
+                )
             # Remove a lock
-            elif type(to) == bool and not to:
-                cipher = AES.new(hash_password(lock_key, image.metadata.salt)[0], AES.MODE_GCM, nonce=image.metadata.nonce)
+            elif type(to) == bool:
+                cipher = AES.new(check_key_len(metadata_lock_key), AES.MODE_GCM, nonce=image.metadata.nonce)
+                image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag))
+                content_type = image_metadata.real_content_type
+                image_metadata.real_content_type = None
                 db_images.update_one({
                     "_id": id
                 }, {
                     "$set": {
+                        "content_type": content_type,
                         "lock.is_locked": False,
-                        "metadata.data": cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag)
+                        "metadata.data": image_metadata.dict(exclude_none=True),
+                        "thumbnail": Thumbnail().dict()
                     },
                     "$unset": {
                         "lock.version": None,
@@ -527,7 +574,7 @@ def patch_image_information(
                     }
                 })
                 image_grid_out = fs_images.open_download_stream(id)
-                cipher = AES.new(hash_password(lock_key, image_grid_out.metadata["salt"])[0], AES.MODE_GCM, nonce=image_grid_out.metadata["nonce"])
+                cipher = AES.new(check_key_len(image_lock_key), AES.MODE_GCM, nonce=image_grid_out.metadata["nonce"])
                 decrypted_image_bytes = cipher.decrypt_and_verify(image_grid_out.read(), image_grid_out.metadata["tag"])
                 fs_images.delete(id)
                 fs_images.upload_from_stream_with_id(
@@ -536,6 +583,7 @@ def patch_image_information(
                         "content_type": image_grid_out.metadata["content_type"],
                     }
                 )
+                return ImageEditResponse()
             else:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="to has to be either a string or boolean, depending on what you want to modify.")
             

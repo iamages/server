@@ -13,7 +13,7 @@
     <meta property="og:url" content="{{ url_for('get_collection_embed', id=collection.id) }}">
     <meta property="article:published_time" content="{{collection.created_on}}">
     <meta name="twitter:card" content="summary">
-    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument=iamages://collections/{{ collection.id }}">
+    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument={{ url_for('get_collection_embed', id=collection.id) }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#F1965B">
     <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">
@@ -38,26 +38,18 @@
       <div class="hero-body">
         <div class="container has-text-centered">
           <div class="columns is-centered is-vcentered">
-            <div class="column is-half">
-              {% for image in images -%}
-                <div class="card">
-                  <div class="card-image">
-                    <figure class="imagese">
-                      <img src="{{ url_for('get_thumbnail', id=image.id) }}" alt="Thumbnail for: {{image.id}}">
+            {% for column in images|batch(3) -%}
+              <div class="column">
+                {% for image in column -%}
+                  <a href="{{ url_for('get_image_embed', id=image.id) }}" target="_blank">
+                    <figure class="image is-square">
+                      <img src="{{ url_for('get_thumbnail', id=image.id) }}" alt="Thumbnail for: {{image.id}}" style="object-fit: cover;">
                     </figure>
-                  </div>
-                  <div class="card-content has-text-left">
-                    {% if image.owner -%}
-                    <span class="has-text-weight-bold">{{image.owner}}</span>
-                    {%- else %}
-                    <span class="has-text-weight-bold">Anonymous</span>
-                    {%- endif %}
-                    <a href="{{ url_for('get_image_embed', id=image.id) }}" target="_blank">TODO</a>
-                  </div>  
-                </div>
-                <br>
-              {%- endfor %}
-            </div>
+                  </a>
+                  <br>
+                {%- endfor %}
+              </div>
+            {%- endfor %}
           </div>
         </div>
       </div>

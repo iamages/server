@@ -18,8 +18,8 @@ async def tos(request: Request):
     return templates.TemplateResponse("tos.html", {
         "request": request,
         "owner": {
-            "name": api_settings.iamages_server_owner,
-            "contact": api_settings.iamages_server_contact
+            "name": api_settings.server_owner,
+            "contact": api_settings.server_contact
         }
     })
 
@@ -33,7 +33,7 @@ async def privacy(request: Request):
     return templates.TemplateResponse("privacy.html", {
         "request": request,
         "owner": {
-            "name": api_settings.iamages_server_owner,
-            "contact": api_settings.iamages_server_contact
+            "name": api_settings.server_owner,
+            "contact": api_settings.server_contact
         }
     })

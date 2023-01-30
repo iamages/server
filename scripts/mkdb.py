@@ -1,13 +1,14 @@
 __version__ = "4.0.0"
-__copyright__ = "© jkelol111 et al 2021-present"
+__copyright__ = "© jkelol111 et al 2023-present"
 
 from getpass import getpass
+from urllib.parse import quote
 
-from pymongo import MongoClient, TEXT
+from pymongo import MongoClient, TEXT, DESCENDING
 
-from .models.db import SUPPORTED_STORAGE_VER, DatabaseVersionModel
+from models.db import DatabaseVersionModel
 
-print(f"[Make Iamages Database {SUPPORTED_STORAGE_VER} - (C) jkelol111 et al. 2022-present]")
+print(f"[Make Iamages Database v{__version__} - {__copyright__}]")
 print("")
 print("WARNING:")
 print("This script presumes that you already have an admin account set up.")
@@ -16,7 +17,7 @@ print("https://docs.mongodb.com/manual/tutorial/configure-scram-client-authentic
 print("")
 
 conn_str = f"mongodb://\
-{input('Enter DB admin username: ')}:{getpass('Enter DB admin password: ')}@{input('Enter DB URL & port: ')}\
+{quote(input('Enter DB admin username: '))}:{quote(getpass('Enter DB admin password: '))}@{input('Enter DB URL & port (host:port): ')}\
 "
 
 client = MongoClient(conn_str)
@@ -31,13 +32,17 @@ db.command(
 )
 
 # Create indexes
-db_images = db.images
-db_images.create_index(("owner", TEXT), sparse=True)
-db_collections = db.collections
-db_collections.create_index(("owner", TEXT), sparse=True)
+db.images.create_index([("owner", TEXT), ("metadata.data.description", TEXT)], sparse=True)
+db.images.create_index([("collections", DESCENDING)], sparse=True)
+
+db.collections.create_index([("owner", TEXT), ("description", TEXT)])
+
+db.users.create_index([("email", TEXT)], sparse=True)
+
+db.password_resets.create_index("created_on", expireAfterSeconds=900)
 
 # Add database version upgrade record.
-db.internal.insert_one(DatabaseVersionModel())
+db.internal.insert_one(DatabaseVersionModel().dict())
 
 print("")
 print("Et voila! The database and 'iamages' database user have been created.")

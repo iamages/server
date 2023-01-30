@@ -7,4 +7,4 @@ gunicorn \
     --access-logformat '%(r)s %(s)s' \
     --timeout 0 \
     --preload \
-    server.main:app
+    api.main:app

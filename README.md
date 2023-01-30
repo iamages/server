@@ -1,26 +1,28 @@
 # Iamages Server
 
 This is the public source code for the Iamages Server. 
-An official instance is deployed at https://iamages.uber.space/iamages/api/v3, usually using the latest commit available here.
+An official instance is deployed at https://iamages.jkelol111.me/api, usually using the latest commit available here.
 
 ## Server deployment guide
 
 1. Get a copy from releases and extract somewhere/clone this repo to use the bleeding edge version.
-2. Install RethinkDB using your preferred method (you can build it yourself using our Multipass build scripts as well: https://github.com/iamages/rethinkdb-multipass-build).
-3. Install dependencies using `pipenv` or `pip3` (both `Pipfile` and synced `requirements.txt` available, pick your optimal solution)
+2. Install MongoDB.
+3. Install dependencies using `poetry` or `pip3` (both `pyproject.toml` and synced `requirements.txt` available, pick your optimal solution)
 4. Create the database by using `scripts/mkdb.py`.
 5. Start the server using `gunicorn` (a sample startup script is provided as `start_prod_server.sh`).
 
 The following environmental variables may be set to alter the defaults:
 - `IAMAGES_MAX_SIZE`: maximum size of one file (in bytes).
-- `IAMAGES_ACCEPT_MIMES`: accept mime types for files (in JSON array format).
-- `IAMAGES_STORAGE_DIR`: path to your storage directory.
-- `IAMAGES_DB_HOST`: address to your RethinkDB instance.
-- `IAMAGES_DB_PORT`: port of your RethinkDB instance.
-- `IAMAGES_DB_USER`: username with permissions to access the Iamages database.
-- `IAMAGES_DB_PWD`: password to above user.
-- `IAMAGES_SERVER_OWNER`: name of server owner (optional).
-- `IAMAGES_SERVER_CONTACT`: contact to the server owner (optional, examples include: mailto, tel link).
+- `IAMAGES_DB_HOST`: MongoDB login URL to `iamages` database (requires URL encoding)
+- `IAMAGES_JWT_SECRET`: random string used to generate tokens.
+- `IAMAGES_SERVER_OWNER`: name of server owner.
+- `IAMAGES_SERVER_CONTACT`: contact to the server owner (examples include: mailto, tel link).
+- `IAMAGES_SMTP_HOST`: SMTP host address.
+- `IAMAGES_SMTP_PORT`: SMTP host port.
+- `IAMAGES_SMTP_STARTTLS`: SMTP STARTTLS enabled (recommended).
+- `IAMAGES_SMTP_USERNAME`: SMTP username (optional).
+- `IAMAGES_SMTP_PASSWORD`: SMTP password (optional).
+- `IAMAGES_SMTP_FROM`: email address used in `From` fields.
 
 Periodically check back here for new releases/commits, and update the server using step 1 and 2 (3 might be required too, along with 'Using database/storage layout upgrader' below)
 

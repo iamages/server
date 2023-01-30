@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: https://ogp.me/ns/article">
+  <head>
+    <meta name="robots" content="noindex">
+    {% if image.lock.is_locked -%}
+    <title>Locked image - on Iamages</title>
+    <meta name="description" content="Open to unlock this image">
+    <meta property="og:title" content="Locked image">
+    <meta property="og:image" content="{{ url_for('static', path='/icons/locked.png') }}">
+    <meta property="og:image:alt" content="Locked image">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="64">
+    <meta property="og:image:height" content="64">
+    {%- else %}
+    <title>{{image.metadata.data.description}} - on Iamages</title>
+    <meta name="description" content="{{image.metadata.data.description}}">
+    <meta property="og:title" content="{{image.metadata.data.description}}">
+    <meta property="og:image" content="{{ url_for('get_thumbnail', id=image.id) }}">
+    <meta property="og:image:alt" content="{{image.metadata.data.description}}">
+    <meta property="og:image:type" content="{{image.content_type}}">
+    <meta property="og:image:width" content="{{image.metadata.data.width}}">
+    <meta property="og:image:height" content={{image.metadata.data.height}}>
+    {%- endif %}
+    {% if image.owner -%}
+    <meta name="author" content="{{image.owner}}">
+    {%- endif %}
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Iamages">
+    <meta property="og:url" content="{{ url_for('get_image_embed', id=image.id) }}">
+    <meta property="article:published_time" content="{{image.created_on}}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument={{ url_for('get_thumbnail', id=image.id) }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#F1965B">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/animate.min.css') }}">
+  </head>
+  <body>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('get_image_embed', id=image.id) }}">
+                <img src="{{ url_for('static', path='/icons/iamages.png') }}" width="28" height="28">
+              </a>
+              <a id="link" class="navbar-item" href="{{ url_for('get_image_embed', id=image.id) }}">
+                Embed Viewer&nbsp/&nbsp
+                <b id="description">
+                  {%if image.lock.is_locked -%}
+                  Locked image
+                  {%- else %}
+                  {{image.metadata.data.description}}
+                  {% endif %}
+                </b>
+              </a>
+              <div class="navbar-item">
+                <button id="info-button" class="button" onclick="openInfo()" disabled>
+                  Info
+                </button>
+              </div>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container has-text-centered">
+          <div class="columns is-centered is-vcentered">
+            <div class="column is-half">
+              {% if image.lock.is_locked -%}
+              <img id="image" class="is-hidden" alt="We couldn't find the file you wanted.">
+              <div id="locked-info">
+                <h1 class="title is-1">🔒</h1>
+                <h1 class="title">Locked image</h1>
+                <h6 class="subtitle">To view this image, you will need to unlock it</h6>
+                <div class="field is-grouped is-grouped-centered">
+                  <p class="control">
+                    <input id="unlock-key-input" class="input" type="password" placeholder="Unlock key">
+                  </p>
+                  <p class="control">
+                    <button id="unlock-button" class="button is-danger" onclick="unlock()" disabled>
+                      JavaScript is disabled
+                    </button>
+                  </p>
+                </div>
+                <span id="unlock-error-span" class="is-danger is-hidden"></span>
+              </div>
+              {%- else %}
+              <img src="{{ url_for('get_image_file', id=image.id) }}" alt="We couldn't find the file you wanted.">
+              {%- endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-foot">
+        <section class="section">
+          <div class="container has-text-centered content">
+            <p>
+              By using this service, you agree to our <a href="{{ url_for('tos') }}" target="_blank">Terms of Service</a> and 
+              <a href="{{ url_for('privacy') }}" target="_blank">Privacy Policy</a>
+            </p>
+          </div>
+        </section>
+      </div>
+    </section>
+    <div id="info-modal" class="modal">
+      <div class="modal-background animate__animated" data-bulma-modal="close" style="padding-bottom: 8px;"></div>
+      <div class="modal-card animate__animated">
+        <section class="modal-card-body">
+          <div class="container">
+            <button class="delete" data-bulma-modal="close"></button>
+            <table class="table is-striped is-narrow is-fullwidth">
+              <tbody>
+                <tr>
+                  <th>Content type</th>
+                  <td id="info-modal-content-type">?</td>
+                </tr>
+                <tr>
+                  <th>Dimensions</th>
+                  <td id="info-modal-dimensions">?</td>
+                </tr>
+                <tr>
+                  <th>Created on</th>
+                  <td id="info-modal-created-on">?</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script src="{{ url_for('static', path='/js/lib/bulma-modal.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/js/lib/relativetime.js') }}" defer></script>
+    <script defer>
+      const image = JSON.parse('{{image|tojson}}');
+      {% if image.lock.is_locked -%}
+      const downloadURL = "{{ url_for('get_image_file', id=image.id) }}"
+      {%- endif %}
+    </script>
+    <script src="{{ url_for('static', path='/js/image/info.js') }}" defer></script>
+    {% if image.lock.is_locked -%}
+    <script src="{{ url_for('static', path='/js/image/unlock.js') }}" defer></script>
+    {%- endif %}
+  </body>
+</html>

@@ -15,10 +15,10 @@ class ImageMetadata(BaseModel):
 
 class Thumbnail(BaseModel):
     is_computing: bool = Field(default_factory=lambda: False)
-    is_unavailable: bool = Field(default_factory=lambda: True)
+    is_unavailable: bool = Field(default_factory=lambda: False)
 
 
-class Metadata(BaseModel):
+class ImageMetadataContainer(BaseModel):
     salt: bytes | None
     nonce: bytes | None
     data: bytes | ImageMetadata
@@ -55,7 +55,7 @@ class Image(DefaultModel):
         return values
 
 class ImageInDB(Image):
-    metadata: Metadata
+    metadata: ImageMetadataContainer
     collections: list[PyObjectId] = []
     ownerless_key: UUID | None
 

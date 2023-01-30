@@ -1,45 +1,23 @@
-# Scripts reference
+# Iamages v3 to v4 Migration Tool
+This tool helps you migrate your Iamages v3 installation to v4.
 
-This README details the various functionality of the scripts found in this directory.
+## Prerequisites
+- A current operational installation of Iamages v3.
+- All other requirements to run Iamages v4 as detailed in the root README.
 
-## Common information
+## Instructions
+1. Create a new storage archive by using `storagearchive.py` in your current installation:
 
-When running these scripts, as well as the server, several environment variables need to be provided:
-- `STORAGE_DIR`: path to your Iamages storage (required by `dbctl.py`).
-- `ARCHIVE_DIR`: path to your storage archive directory (only required by `storagearchive.py`).
+`python3 /path/to/v3/scripts/storagearchive.py archive`
 
-## dbctl.py
+Remember to note down the path of the archive and hash file.
 
-Manages the Iamages database.
+2. Configure the environment variables for v4, namely the database URL.
 
-Usage: `dbctl.py command [data]`
+3. Run `3to4.py` to perform the migration.
 
-- `command`:
-    - `chpwd`: Change the password for the `iamages` database account.
-    - `getfile`: Get a file given an UUID.
-    - `getuser`: Get an user given an username.
-- `[data]`: data provided to `command`. (optional)
+`python3 /path/to/v4/scripts/3to4.py /path/to/v3/archive/zip`
 
-## dbupgrade.py
+4. Confirm the data has been migrated.
 
-Upgrades the Iamages storage (including database).
-
-Usage: `dbupgrade.py`
-
-## mkdb.py
-
-Makes the Iamages database.
-
-Usage: `mkdb.py`
-
-## storagearchive.py
-
-Manages Iamages storage archives.
-
-Usage: `storagearchive.py command [data]`
-
-- `command`:
-    - `list`: Lists existing archives.
-    - `archive`: Creates a new archive.
-    - `restore`: Restores an existing archive.
-- `[data]` data provided to `command`. (optional)
+5. Optional: remove your v3 installation.

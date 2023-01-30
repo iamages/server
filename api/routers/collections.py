@@ -37,7 +37,7 @@ router = APIRouter(prefix="/collections")
 )
 def new_collection(
     new_collection: NewCollection,
-    user: User | None = Depends(get_optional_user)
+    user: User = Depends(get_user)
 ):
     # Create new collection object
     collection = Collection(
@@ -45,7 +45,7 @@ def new_collection(
         is_private=new_collection.is_private,
         description=new_collection.description
     )
-    db_collections.insert_one(collection.dict(by_alias=True, exclude={"created_on"}))
+    db_collections.insert_one(collection.dict(by_alias=True, exclude={"created_on"}, exclude_none=True))
     # Validate images list.
     add_images(collection.id, new_collection.image_ids, user)
     return collection
@@ -132,11 +132,7 @@ def get_collection_embed(
     id: PyObjectId,
     request: Request
 ):
-    print(list(db_images.find({
-            "collections": id,
-            "is_private": False
-        }).sort("_id", DESCENDING).limit(9)))
-    return templates.TemplateResponse("embed_collection.html", {
+    return templates.TemplateResponse("embed-collection.html", {
         "request": request,
         "collection": get_collection_in_db(id, None),
         "images": list(map( 
@@ -169,8 +165,8 @@ def get_collection_images(
             "$options": "i"
         }
     if pagination.last_id:
-        filters["$lt"] = {
-            "_id": pagination.last_id
+        filters["_id"] = {
+            "$lt": pagination.last_id
         }
     image_dicts = list(db_images.find(filters).sort("_id", DESCENDING).limit(pagination.limit))
     if user:
