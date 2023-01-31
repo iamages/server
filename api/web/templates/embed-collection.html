@@ -1,0 +1,68 @@
+<html prefix="og: http://ogp.me/ns# article: https://ogp.me/ns/article">
+  <head>
+    <meta name="robots" content="noindex">
+    <title>{{collection.description}} - on Iamages</title>
+    <meta name="description" content="{{collection.description}}">
+    {% if collection.owner -%}
+    <meta name="author" content="{{collection.owner}}">
+    {%- endif %}
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Iamages">
+    <meta property="og:title" content="{{collection.description}}">
+    <meta property="og:description" content="{{ images|length }} image(s) in this Collection.">
+    <meta property="og:url" content="{{ url_for('get_collection_embed', id=collection.id) }}">
+    <meta property="article:published_time" content="{{collection.created_on}}">
+    <meta name="twitter:card" content="summary">
+    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument={{ url_for('get_collection_embed', id=collection.id) }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#F1965B">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+  </head>
+  <body>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('get_collection_embed', id=collection.id) }}">
+                <img src="{{ url_for('static', path='/icons/iamages.png') }}" width="28" height="28">
+              </a>
+              <a class="navbar-item" href="{{ url_for('get_collection_embed', id=collection.id) }}">
+                Embed Viewer&nbsp/&nbsp<b>{{collection.description}}</b>
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container has-text-centered">
+          <div class="columns is-centered is-vcentered">
+            {% for column in images|batch(3) -%}
+              <div class="column">
+                {% for image in column -%}
+                  <a href="{{ url_for('get_image_embed', id=image.id) }}" target="_blank">
+                    <figure class="image is-square">
+                      <img src="{{ url_for('get_thumbnail', id=image.id) }}" alt="Thumbnail for: {{image.id}}" style="object-fit: cover;">
+                    </figure>
+                  </a>
+                  <br>
+                {%- endfor %}
+              </div>
+            {%- endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="hero-foot">
+        <section class="section">
+          <div class="container has-text-centered content">
+            <p>
+              By using this service, you agree to our <a href="{{ url_for('tos') }}" target="_blank">Terms of Service</a> and 
+              <a href="{{ url_for('privacy') }}" target="_blank">Privacy Policy</a>
+            </p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </body>
+</html>

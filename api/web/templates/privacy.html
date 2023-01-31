@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta type="charset" value="utf-8">
+    <title>Iamages Privacy Policy</title>
+    <meta type="description" content="The privacy policy which governs Iamages.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
+  </head>
+  <body>
+    <section class="hero is-fullheight">
+      <div class="hero-head">
+        <nav class="navbar">
+          <div class="container">
+            <div class="navbar-brand">
+              <a class="navbar-item" href="{{ url_for('privacy') }}">
+                <img src="{{ url_for('static', path='/icons/iamages.png') }}" width="28" height="28">
+              </a>
+              <a class="navbar-item" href="{{ url_for('privacy') }}">
+                Privacy Policy
+              </a>
+            </div>
+          </div>
+        </nav>
+      </div>
+      <div class="hero-body">
+        <div class="container content">
+          <p>
+            This document governs your data on Iamages's API and related apps/websites (Service). 
+            <br>
+            By using the Service, you hereby agree to these terms.
+            <br><br>
+            <strong>Data collected on your behalf (Collected Data):</strong>
+            <ul>
+              <li>IP address (logged to the server console for debug purposes, not recorded to any files)</li>
+              <li>User name (optional, used for uploading to account)</li>
+              <li>User password (optional, used for uploading to account)</li>
+              <li>Email (optional, used for password reset)</li>
+              <li>Uploaded files (files uploaded to the Service)</li>
+            </ul>
+            <br>
+            The Collected Data will be used to provide you with the neccessary services. The Service is designed so that most of these
+            information is not personally identifiable, such as removing image metadata from all "Uploaded files", only using "User name" 
+            and "User password" for authentication, hashing and salting passwords, etc. It is up you to decide how to anonymize these Collected Data to suit your 
+            privacy preferences.
+            <br><br>
+            At all times, we (Service Owner) will strive to protect the Collected Data using a variety of methods, like using storage 
+            encryption provided by our hosting provider, utilizing a strong access password, etc. However, as said in our "Terms of Service",
+            we shall not be held accountable if an unfortunate situation were to occur (Service gets hacked, Government requests data of user, etc.).
+            You are using this free Service at your own risk.
+            <br><br>
+            We will never process data requests from third parties, and more importantly, we will never sell your data. 
+            Do note that our hosting provider reserves the right to provide the data stored here under their government's request.
+            Although such occurances are rare, there is still a slight chance it may happen, so we encourage you to follow the advice in the above clauses
+            to protect your privacy while using the Service.
+            <br><br>
+            If you want to request a copy of your data, or delete the data from our systems, we request that you provide the following Collected Data:
+            <ul>
+              <li>User name</li>
+              <li>Email</li>
+            </ul>
+            via <a class="button is-danger" href="{{owner.contact}}">contact {{owner.name}}</a> as well as your intentions. We shall help you 
+            with your request as soon as possible.
+          </p>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

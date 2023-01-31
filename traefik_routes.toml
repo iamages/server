@@ -2,14 +2,14 @@
   [http.middlewares]
 
     [http.middlewares.api-stripprefix.stripPrefix]
-      prefixes = ["/iamages/api/v3"]
+      prefixes = ["/api"]
 
   [http.routers]
 
     [http.routers.app-http]
       entryPoints = ["http"]
       service = "app"
-      rule = "PathPrefix(`/iamages/api/v3`)"
+      rule = "PathPrefix(`/api`)"
       middlewares = ["api-stripprefix"]
 
   [http.services]

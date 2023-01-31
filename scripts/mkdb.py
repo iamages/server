@@ -1,48 +1,50 @@
-__version__ = "3.1.0"
-__copyright__ = "© jkelol111 et al 2021-present"
+__version__ = "4.0.0"
+__copyright__ = "© jkelol111 et al 2023-present"
 
 from getpass import getpass
+from urllib.parse import quote
 
-from common.config import server_config
-from common.db import get_conn, r
+from pymongo import MongoClient, TEXT, DESCENDING
 
-SUPPORTED_STORAGE_VER = 3
+from models.db import DatabaseVersionModel
 
-print("[Make Iamages Database version '{0}'. {1}]".format(__version__, __copyright__))
+print(f"[Make Iamages Database v{__version__} - {__copyright__}]")
+print("")
+print("WARNING:")
+print("This script presumes that you already have an admin account set up.")
+print("If not, nope out below and follow the instructions at:")
+print("https://docs.mongodb.com/manual/tutorial/configure-scram-client-authentication/")
+print("")
 
-with get_conn(user="admin", password=getpass("Enter 'admin' password: ")) as conn:
-    print("- Creating new database user 'iamages' & password 'iamages'.")
-    r.db("rethinkdb").table("users").insert({
-        "id": server_config.iamages_db_user,
-        "password": server_config.iamages_db_pwd
-    }).run(conn)
+conn_str = f"mongodb://\
+{quote(input('Enter DB admin username: '))}:{quote(getpass('Enter DB admin password: '))}@{input('Enter DB URL & port (host:port): ')}\
+"
 
-    if 'iamages' in r.db_list().run(conn):
-        erase = input("WARNING: The database 'iamages' exists already, do you want to remove it? <Y/n>: ").lower()
-        if erase != "y":
-            print("Unable to proceed, stopping here.")
-            exit(1)
-        r.db_drop("iamages").run(conn)
+client = MongoClient(conn_str)
+db = client.iamages
 
-    print("- Creating new 'iamages' database.")
-    r.db_create("iamages").run(conn)
+# Create the new Iamages user.
+db.command(
+    "createUser",
+    "iamages",
+    pwd=getpass("New password for 'iamages' database user: "),
+    roles=["readWrite"]
+)
 
-    print("- Granting 'iamages' user access to new 'iamages' database.")
-    r.db("iamages").grant(server_config.iamages_db_user, {
-        "read": True,
-        "write": True
-    }).run(conn)
+# Create indexes
+db.images.create_index([("owner", TEXT), ("metadata.data.description", TEXT)], sparse=True)
+db.images.create_index([("collections", DESCENDING)], sparse=True)
 
-    print("- Creating tables in database.")
-    r.table_create("files").run(conn)
-    r.table_create("collections").run(conn)
-    r.table_create("users", primary_key="username").run(conn)
-    r.table_create("internal", primary_key="version").run(conn)
+db.collections.create_index([("owner", TEXT), ("description", TEXT)])
 
-    print("- Writing database information.")
-    r.table("internal").insert({
-        "version": SUPPORTED_STORAGE_VER,
-        "created": r.now()
-    }).run(conn)
+db.users.create_index([("email", TEXT)], sparse=True)
 
-print("Done!")
+db.password_resets.create_index("created_on", expireAfterSeconds=900)
+
+# Add database version upgrade record.
+db.internal.insert_one(DatabaseVersionModel().dict())
+
+print("")
+print("Et voila! The database and 'iamages' database user have been created.")
+print("You may now start the API server.")
+print("(remember, modify the IAMAGES_DB_URL environment variable!")
