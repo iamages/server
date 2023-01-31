@@ -29,8 +29,9 @@ db_password_resets = db.password_resets
 
 def perform_user_delete(username: str):
     db_users.delete_one({"_id": username})
-    image_ids = db_images.find({"owner": username}, {"_id": ...})
-    for image_id in image_ids:
+    image_ids = db_images.find({"owner": username}, {"_id": 1})
+    for image_id_dict in image_ids:
+        image_id = image_id_dict["_id"]
         db_images.delete_one({"_id": image_id})
         try:
             fs_images.delete({"_id": image_id})
