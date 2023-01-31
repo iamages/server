@@ -225,7 +225,8 @@ def get_image_file(
     image_grid_out = fs_images.open_download_stream(image.id)
 
     headers = {
-        "Content-Length": str(image_grid_out.length)
+        "Content-Length": str(image_grid_out.length),
+        "Cache-Control": f"public, max-age=86400"
     }
 
     if image.lock.is_locked:

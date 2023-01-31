@@ -29,7 +29,7 @@
     <meta property="og:url" content="{{ url_for('get_image_embed', id=image.id) }}">
     <meta property="article:published_time" content="{{image.created_on}}">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument={{ url_for('get_thumbnail', id=image.id) }}">
+    <meta name="apple-itunes-app" content="app-id=1611306062, app-argument={{ url_for('get_image_embed', id=image.id) }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#F1965B">
     <link rel="icon" type="image/png" href="{{ url_for('static', path='/icons/iamages.png') }}">

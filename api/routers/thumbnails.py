@@ -71,9 +71,14 @@ def create_thumbnail(id: PyObjectId):
 
 def stream_thumbnail(id: PyObjectId) -> StreamingResponse:
     file = fs_thumbnails.open_download_stream(id)
-    return StreamingResponse(yield_grid_file(file), media_type=file.content_type, headers={
-        "Content-Length": str(file.length)
-    })
+    return StreamingResponse(
+        yield_grid_file(file),
+        media_type=file.content_type, 
+        headers={
+            "Content-Length": str(file.length),
+            "Cache-Control": f"public, max-age=86400"
+        }
+    )
 
 router = APIRouter(prefix="/thumbnails")
 
