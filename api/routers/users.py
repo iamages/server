@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from smtplib import SMTP
 from secrets import compare_digest
 
@@ -185,15 +187,28 @@ def get_password_reset_code(
     except Exception as e:
         print(str(e))
 
-    message = EmailMessage()
-    message["Content-Type"] = "text/html; charset=utf-8"
+    message = MIMEMultipart('alternative')
     message["Subject"] = "Reset Iamages account password"
     message["From"] = api_settings.smtp_from
     message["To"] = email
-    message.set_content(templates.get_template("forgot-password.html").render({
-        "request": request,
-        "code": password_reset.code
-    }))
+    message.attach(
+        MIMEText(
+            templates.get_template("forgot-password.txt").render({
+                "request": request,
+                "code": password_reset.code
+            }),
+            "plain"
+        )
+    )
+    message.attach(
+        MIMEText(
+            templates.get_template("forgot-password.html").render({
+                "request": request,
+                "code": password_reset.code
+            }),
+            "html"
+        )
+    )
     with SMTP(api_settings.smtp_host, api_settings.smtp_port) as smtp:
         if api_settings.smtp_starttls:
             smtp.starttls()
