@@ -81,7 +81,7 @@ def return_file_response(image: ImageInDB) -> FileResponse:
 
 def return_redirect_response(image: ImageInDB, request: Request) -> RedirectResponse:
     return RedirectResponse(
-        request.url_for("get_image_file", id=image.id, extension=image.file.type_extension),
+        request.url_for("get_image_file", id=image.id, extension=image.file.type_extension.lstrip(".")),
         status.HTTP_308_PERMANENT_REDIRECT,
         headers={
             "X-Iamages-Image-Private": str(image.is_private)
