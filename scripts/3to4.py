@@ -1,20 +1,21 @@
-from argparse import ArgumentParser
-from zipfile import ZipFile
-from pathlib import Path
-from hashlib import blake2b
 import json
+from argparse import ArgumentParser
 from csv import DictReader
-from io import TextIOWrapper
 from datetime import datetime
+from hashlib import blake2b
+from io import TextIOWrapper
 from mimetypes import guess_extension
+from pathlib import Path
+from zipfile import ZipFile
+from shutil import rmtree, copyfileobj
 
-from tqdm import tqdm
-
-from common.db import db_images, db_collections, db_users, fs_images
-
-from models.images import ImageInDB, ImageMetadataContainer, ImageMetadata, Lock, Thumbnail
+from common.db import db_collections, db_images, db_users
+from common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from models.collections import Collection
+from models.images import (ImageInDB, ImageMetadata, ImageMetadataContainer,
+                           Lock, Thumbnail, File)
 from models.users import UserInDB
+from tqdm import tqdm
 
 arg_parser = ArgumentParser(description="Tool for migrating Iamages v3 to v4 using archives.")
 arg_parser.add_argument("archive_file", action="store", help="Path to the v3 archive file.")
@@ -43,6 +44,11 @@ with ZipFile(archive_file) as z:
         meta = json.load(metaf)
         if meta["version"] != 3:
             raise Exception(f"Archive file version is not supported.\n\nExpected: 3\nGot: {meta['version']}")
+
+    rmtree(IMAGES_PATH, ignore_errors=True)
+    IMAGES_PATH.mkdir()
+    rmtree(THUMBNAILS_PATH)
+
     print("1/: Migrating collections.")
     collections_map = {}
     with z.open("collections.csv", "r") as c:
@@ -62,7 +68,10 @@ with ZipFile(archive_file) as z:
                 owner=file_dict["owner"] if len(file_dict["owner"]) != 0 else None,
                 is_private=True if file_dict["private"] == 'True' else False,
                 lock=Lock(is_locked=False),
-                content_type=file_dict["mime"],
+                file=File(
+                    content_type=file_dict["mime"],
+                    type_extension=guess_extension(file_dict["mime"])
+                ),
                 thumbnail=Thumbnail(),
                 metadata=ImageMetadataContainer(
                     data=ImageMetadata(
@@ -84,14 +93,11 @@ with ZipFile(archive_file) as z:
                     }
                 )
             )
-            fs_images.upload_from_stream_with_id(
-                image.id,
-                str(image.id) + guess_extension(image.content_type),
-                z.open(f"files/{file_dict['file']}", "r"),
-                metadata={
-                    "content_type": image.content_type
-                }
-            )
+            with (
+                z.open(f"files/{file_dict['file']}", "r") as old_image,
+                open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as new_image
+            ):
+                copyfileobj(old_image, new_image)
     print("3/: Migrating users.")
     with z.open("users.csv", "r") as u:
         for user in tqdm(DictReader(TextIOWrapper(u, "utf-8"))):

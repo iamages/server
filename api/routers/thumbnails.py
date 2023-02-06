@@ -1,16 +1,17 @@
 from os import fstat
 from secrets import compare_digest
-from tempfile import NamedTemporaryFile
 from traceback import print_exception
 
 from fastapi import (APIRouter, Depends, HTTPException,
                      Request, status)
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from PIL import Image as PillowImage
 from PIL.Image import LANCZOS
-from gridfs.errors import NoFile
+from io import BytesIO
+from sys import getsizeof
 
-from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
+from ..common.db import db_images
+from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from ..common.security import get_optional_user
 from ..models.default import PyObjectId
 from ..models.images import ImageInDB
@@ -28,63 +29,70 @@ def set_unavailable(id: PyObjectId):
         }
     })
 
-def create_thumbnail(id: PyObjectId):
-    db_images.update_one({"_id": id}, {
+def create_thumbnail(image: ImageInDB):
+    db_images.update_one({"_id": image.id}, {
         "$set": {
             "thumbnail.is_computing": True
         }
     })
 
     try:
-        with NamedTemporaryFile() as thumbnail:
-            image_grid_out = fs_images.open_download_stream(id)
-            content_type = image_grid_out.metadata["content_type"]
-
-            with PillowImage.open(image_grid_out) as image:
-                image.thumbnail((512, 512), LANCZOS)
-                if content_type == "image/gif":
-                    image.save(thumbnail, "gif", save_all=True)
+        file_name = f"{image.id}{image.file.type_extension}"
+        with (
+            open(IMAGES_PATH / file_name, "rb") as image_file,
+            BytesIO() as temporary
+        ):
+            with PillowImage.open(image_file) as pil_image:
+                pil_image.thumbnail((512, 512), LANCZOS)
+                if image.file.content_type == "image/gif":
+                    pil_image.save(temporary, "gif", save_all=True)
                 else:
-                    image.save(thumbnail, content_type.split("/")[1])
+                    pil_image.save(temporary, image.file.content_type.split("/")[1])
 
-            if image_grid_out.length < fstat(thumbnail.fileno()).st_size:
-                set_unavailable(id)
+            if fstat(image_file.fileno()).st_size < getsizeof(temporary):
+                set_unavailable(image.id)
                 return
             
-            thumbnail.seek(0)
-            fs_thumbnails.upload_from_stream_with_id(
-                id,
-                image_grid_out.filename,
-                thumbnail,
-                metadata={
-                    "content_type": content_type
-                }
-            )
-            db_images.update_one({"_id": id}, {
+            with open(THUMBNAILS_PATH / file_name, "wb") as thumbnail_file:
+                thumbnail_file.write(temporary.getvalue())
+
+            db_images.update_one({"_id": image.id}, {
                 "$set": {
                     "thumbnail.is_computing": False
                 }
             })
     except Exception as e:
-        set_unavailable(id)
+        set_unavailable(image.id)
         raise e
 
-def stream_thumbnail(id: PyObjectId) -> StreamingResponse:
-    file = fs_thumbnails.open_download_stream(id)
-    return StreamingResponse(
-        yield_grid_file(file),
-        media_type=file.content_type, 
+def return_file_response(image: ImageInDB) -> FileResponse:
+    file_name = f"{image.id}{image.file.type_extension}"
+    path = THUMBNAILS_PATH / file_name
+    if not path.exists():
+        raise FileNotFoundError()
+    return FileResponse(
+        path,
+        filename=file_name,
+        media_type=image.file.content_type,
         headers={
-            "Content-Length": str(file.length),
-            "Cache-Control": f"public, max-age=86400"
+            "Cache-Control": "public, max-age=86400"
+        }
+    )
+
+def return_redirect_response(image: ImageInDB, request: Request) -> RedirectResponse:
+    return RedirectResponse(
+        request.url_for("get_image_file", id=image.id, extension=image.file.type_extension),
+        status.HTTP_308_PERMANENT_REDIRECT,
+        headers={
+            "X-Iamages-Image-Private": str(image.is_private)
         }
     )
 
 router = APIRouter(prefix="/thumbnails")
 
 @router.get(
-    "/{id}",
-    response_class=StreamingResponse,
+    "/{id}.{extension}",
+    response_class=FileResponse,
     response_description="Thumbnail.",
     responses={
         308: {
@@ -100,6 +108,7 @@ router = APIRouter(prefix="/thumbnails")
 )
 def get_thumbnail(
     id: PyObjectId,
+    extension: str,
     request: Request,
     user: User | None = Depends(get_optional_user)
 ):
@@ -118,24 +127,28 @@ def get_thumbnail(
     if image.is_private and (not user or not compare_digest(image.owner, user.username)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this thumbnail.")
 
+    if image.file.type_extension.lstrip(".") != extension:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Wrong file extension.")
+
     if image.thumbnail.is_computing:
-        return RedirectResponse(request.url_for("get_image_file", id=id), headers={
+        return RedirectResponse(request.url_for("get_image_file", id=id, extension=extension), headers={
              "X-Iamages-Image-Private": str(image.is_private)
         })
 
     try:
-        return stream_thumbnail(id)
-    except NoFile:
+        return return_file_response(image)
+    except FileNotFoundError:
         if not image.thumbnail.is_unavailable:
             try:
-                create_thumbnail(id)
-                return stream_thumbnail(id)
+                create_thumbnail(image)
+                return return_file_response(image)
             except Exception as e:
                 print_exception(e)
                 raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not create thumbnail for this image.")
+        else:
+            return return_redirect_response(image, request)
     except Exception as e:
-        return RedirectResponse(request.url_for("get_image_file", id=id), status.HTTP_308_PERMANENT_REDIRECT, headers={
-            "X-Iamages-Image-Private": str(image.is_private)
-        })
+        print_exception(e)
+        return return_redirect_response(image, request)
 
 

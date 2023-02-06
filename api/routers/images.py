@@ -4,32 +4,35 @@ from mimetypes import guess_extension
 from secrets import compare_digest
 from typing import BinaryIO
 from uuid import UUID, uuid4
-from base64 import b64encode
 
 import magic
 import orjson
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from fastapi import (APIRouter, Body, Depends, Form, Header, HTTPException,
-                     UploadFile, status, Request)
+                     Request, UploadFile, status)
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import Response, StreamingResponse, HTMLResponse
-from gridfs.errors import NoFile as GridFSNoFile
+from fastapi.responses import (FileResponse, HTMLResponse, Response,
+                               StreamingResponse)
 from passlib.hash import argon2
 from PIL import Image as PillowImage
 from PIL.ImageOps import exif_transpose
 from pydantic import Json
+from pydantic.json import ENCODERS_BY_TYPE
 
-from ..common.db import db_images, fs_images, fs_thumbnails, yield_grid_file
+from ..common.db import db_images
+from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from ..common.security import get_optional_user, get_user
 from ..common.settings import api_settings
 from ..common.templates import templates
 from ..models.default import PyObjectId
-from ..models.images import (EditableImageInformation, Image,
+from ..models.images import (EditableImageInformation, File, Image,
                              ImageEditResponse, ImageInDB, ImageMetadata,
-                             ImageUpload, Lock, LockVersion, ImageMetadataContainer,
-                             Thumbnail)
+                             ImageMetadataContainer, ImageUpload, Lock,
+                             LockVersion, Thumbnail)
 from ..models.users import User
+
+ENCODERS_BY_TYPE[bytes] = lambda b: b64encode(b).decode("utf-8")
 
 SUPPORTED_MIME_TYPES = [
     "image/jpeg",
@@ -61,11 +64,40 @@ def hash_password(key: str, salt: bytes = None) -> tuple[bytes, bytes]:
     # Incorrect padding fix.
     return (b64decode(hashed_key[-1] + "=="), b64decode(hashed_key[-2] + "=="))
 
+def get_image_in_db(id: PyObjectId, user: User | None) -> ImageInDB:
+    image_dict = db_images.find_one({
+        "_id": id
+    })
+
+    if not image_dict:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    image = ImageInDB.parse_obj(image_dict)
+
+    if image.is_private and (not user or image.owner != user.username):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this image.")
+
+    return image
+
+def check_key_len(key: str) -> bytes:
+    key_bytes = b64decode(key)
+    if len(key_bytes) != 16:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Metadata lock key is not exactly 16 bytes.")
+    return key_bytes
+
 router = APIRouter(prefix="/images")
 
 @router.post(
     "/",
     response_model=Image,
+    response_model_exclude={
+        "file": {
+            "salt": ...,
+            "nonce": ...,
+            "tag": ...
+        },
+        "metadata": ...
+    },
     response_model_by_alias=False,
     response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED
@@ -121,12 +153,14 @@ def upload_image(
 
         image = ImageInDB(
             is_private=information.is_private,
-            content_type="application/octet-stream" if information.is_locked else mime,
             lock=Lock(
                 is_locked=information.is_locked,
                 version=LockVersion.aes128gcm_argon2 if information.is_locked else None
             ),
-            thumbnail=Thumbnail(),
+            file=File(
+                content_type="application/octet-stream" if information.is_locked else mime,
+                type_extension=guess_extension("application/octet-stream") if information.is_locked else guess_extension(mime)
+            ),
             metadata=ImageMetadataContainer(
                 salt=salt,
                 nonce=nonce,
@@ -137,128 +171,101 @@ def upload_image(
 
         if user:
             image.owner = user.username
-
-        insert_result = db_images.insert_one(
-            image.dict(by_alias=True, exclude_none=True, exclude={
-                "created_on": ...,
-                "lock": {"upgradable": ...}
-            })
-        )
+        if not information.is_locked:
+            image.thumbnail = Thumbnail()
 
         original_file_format = original_file.format
         # Correct orientation
         original_file = exif_transpose(original_file)
         with (
-            PillowImage.new(original_file.mode, original_file.size) as new_file,
+            PillowImage.new(original_file.mode, original_file.size) as pil_image,
             BytesIO() as temporary
         ):
-            new_file.putdata(original_file.getdata())
+            pil_image.putdata(original_file.getdata())
 
             if mime == "image/gif":
-                new_file.save(temporary, format=original_file_format, save_all=True)
+                pil_image.save(temporary, format=original_file_format, save_all=True)
             else:
-                new_file.save(temporary, format=original_file_format)
+                pil_image.save(temporary, format=original_file_format)
 
-            gridfs_source = temporary.getvalue()
-
-            image_file_metadata = {
-                "content_type": "application/octet-stream" if information.is_locked else mime,
-            }
+            processed_image = temporary.getvalue()
 
             if information.is_locked:
                 key, salt = hash_password(information.lock_key)
-                image_file_metadata["salt"] = salt
+                image.file.salt = salt
 
                 nonce = get_random_bytes(12)
-                image_file_metadata["nonce"] = nonce
+                image.file.nonce = nonce
 
                 cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
 
-                gridfs_source, tag = cipher.encrypt_and_digest(gridfs_source)
-                gridfs_source = BytesIO(gridfs_source)
+                processed_image, tag = cipher.encrypt_and_digest(processed_image)
+                processed_image = BytesIO(processed_image).getvalue()
 
-                image_file_metadata["tag"] = tag
+                image.file.tag = tag
 
-            fs_images.upload_from_stream_with_id(
-                insert_result.inserted_id,
-                f"{insert_result.inserted_id}{'' if information.is_locked else guess_extension(mime)}",
-                gridfs_source,
-                metadata=image_file_metadata
-            )
+            with open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as image_file:
+                image_file.write(processed_image)
 
     if not user:
         ownerless_key = uuid4()
-
-        db_images.update_one({
-            "_id": insert_result.inserted_id
-        }, {
-            "$set": {
-                "ownerless_key": ownerless_key
-            }
-        })
+        image.ownerless_key = ownerless_key
 
         response.headers["X-Iamages-Ownerless-Key"] = str(ownerless_key)
 
-    return Image(**image.dict())
+    db_images.insert_one(
+        image.dict(by_alias=True, exclude_none=True, exclude={
+            "created_on": ...,
+            "lock": {"upgradable": ...}
+        })
+    )
+
+    return image.dict()
 
 @router.api_route(
-    "/{id}/download",
+    "/{id}.{extension}",
     methods=["GET", "HEAD"],
     response_class=StreamingResponse
 )
 def get_image_file(
     id: PyObjectId,
+    extension: str,
     user: User | None = Depends(get_optional_user)
 ):
-    image_dict = db_images.find_one({
-        "_id": id
-    })
+    image = get_image_in_db(id, user)
 
-    if not image_dict:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-
-    image = ImageInDB.parse_obj(image_dict)
-
-    if image.is_private and (not user or image.owner != user.username):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this image.")
-
-    image_grid_out = fs_images.open_download_stream(image.id)
+    if image.file.type_extension.lstrip(".") != extension:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Wrong file extension.")
 
     headers = {
-        "Content-Length": str(image_grid_out.length),
-        "Cache-Control": f"public, max-age=86400"
+        "Cache-Control": "public, max-age=86400"
     }
 
     if image.lock.is_locked:
-        headers["X-Iamages-Lock-Salt"] = b64encode(image_grid_out.metadata["salt"]).decode("utf-8")
-        headers["X-Iamages-Lock-Nonce"] = b64encode(image_grid_out.metadata["nonce"]).decode("utf-8")
-        headers["X-Iamages-Lock-Tag"] = b64encode(image_grid_out.metadata["tag"]).decode("utf-8")
+        headers["X-Iamages-Lock-Salt"] = b64encode(image.file.salt).decode("utf-8")
+        headers["X-Iamages-Lock-Nonce"] = b64encode(image.file.nonce).decode("utf-8")
+        headers["X-Iamages-Lock-Tag"] = b64encode(image.file.tag).decode("utf-8")
 
-    return StreamingResponse(
-        yield_grid_file(image_grid_out),
-        media_type=image_grid_out.metadata["content_type"],
-        headers=headers
+    image_file_name = f"{id}{image.file.type_extension}"
+    return FileResponse(
+        IMAGES_PATH / image_file_name,
+        media_type=image.file.content_type,
+        headers=headers,
+        filename=image_file_name
     )
-
-def get_image_in_db(id: PyObjectId, user: User | None) -> ImageInDB:
-    image_dict = db_images.find_one({
-        "_id": id
-    })
-
-    if not image_dict:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-
-    image = ImageInDB.parse_obj(image_dict)
-
-    if image.is_private and (not user or image.owner != user.username):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this image.")
-
-    return image
 
 @router.api_route(
     "/{id}",
     methods=["GET", "HEAD"],
     response_model=Image,
+    response_model_exclude={
+        "file": {
+            "salt": ...,
+            "nonce": ...,
+            "tag": ...
+        },
+        "metadata": ...
+    },
     response_model_by_alias=False,
     response_model_exclude_none=True
 )
@@ -296,10 +303,11 @@ def get_image_embed(
     id: PyObjectId,
     request: Request
 ):
+    image = get_image_in_db(id, None)
     return templates.TemplateResponse("embed-image.html", {
         "request": request,
         "image": jsonable_encoder(
-            get_image_in_db(id, None),
+            image,
             by_alias=False,
             exclude_none=True,
             exclude={
@@ -307,11 +315,9 @@ def get_image_embed(
                     "upgradable": ...
                 },
                 "collections": ...
-            },
-            custom_encoder={
-                bytes: lambda b: b64encode(b).decode("utf-8")
             }
-        )
+        ),
+        "extension": image.file.type_extension.lstrip(".")
     })
 
 @router.delete(
@@ -344,20 +350,16 @@ def delete_image(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to delete this image.")
 
     db_images.find_one_and_delete({"_id": id})
-    try:
-        fs_images.delete(id)
-        fs_thumbnails.delete(id)
-    except GridFSNoFile:
-        pass
-    except Exception as e:
-        print(str(e))
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Couldn't delete image/thumbnail file.")
 
-def check_key_len(key: str) -> bytes:
-    key_bytes = b64decode(key)
-    if len(key_bytes) != 16:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Metadata lock key is not exactly 16 bytes.")
-    return key_bytes
+    image_file_name = f"{id}{image.file.type_extension}"
+    try:
+        (IMAGES_PATH / image_file_name).unlink()
+    except FileNotFoundError:
+        pass
+    try:
+        (THUMBNAILS_PATH / image_file_name).unlink()
+    except FileNotFoundError:
+        pass
 
 @router.patch(
     "/{id}",
@@ -403,18 +405,17 @@ def patch_image_information(
                 image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image_metadata, image.metadata.tag))
             image_metadata.description = to
 
-            if image.lock.is_locked:
-                image_metadata = orjson.dumps(image_metadata.dict())
-
             nonce = None
             tag = None
-            
+
             if image.lock.is_locked:
+                image_metadata = orjson.dumps(image_metadata.dict())
                 nonce = get_random_bytes(12)
                 cipher = AES.new(metadata_lock_key_bytes, AES.MODE_GCM, nonce=nonce)
                 image_metadata, tag = cipher.encrypt_and_digest(image_metadata)
 
             metadata_object = ImageMetadataContainer(
+                salt=image.metadata.salt,
                 nonce=nonce,
                 data=image_metadata,
                 tag=tag
@@ -432,162 +433,147 @@ def patch_image_information(
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No lock key provided for locked image.")
             # Set a new lock key.
             if type(to) == str:
-                image_grid_out = fs_images.open_download_stream(id)
-
+                # Re-encrypt existing image metadata by decrypting using lock_key
+                # and encrypting using to key.
                 if image.lock.is_locked:
-                    # Re-encrypt existing image metadata by decrypting using lock_key
-                    # and encrypting using to key.
                     cipher = AES.new(
                         check_key_len(metadata_lock_key),
                         AES.MODE_GCM,
                         nonce=image.metadata.nonce
                     )
-                    decrypted_image_metadata = cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag)
+                    metadata_data = cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag)
+                else:
+                    image.metadata.data.real_content_type = image.file.content_type
+                    metadata_data = orjson.dumps(image.metadata.data.dict(exclude_none=True))
 
-                    key, salt = hash_password(to)
-                    nonce = get_random_bytes(12)
-                    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-                    encrypted_image_metadata, tag = cipher.encrypt_and_digest(decrypted_image_metadata)
+                metadata_key, metadata_salt = hash_password(to)
+                metadata_nonce = get_random_bytes(12)
+                cipher = AES.new(metadata_key, AES.MODE_GCM, nonce=metadata_nonce)
+                metadata_data, metadata_tag = cipher.encrypt_and_digest(metadata_data)
 
-                    db_images.update_one({
-                        "_id": id
-                    }, {
-                        "$set": {
-                            "metadata": {
-                                "salt": salt,
-                                "nonce": nonce,
-                                "data": encrypted_image_metadata,
-                                "tag": tag
-                            }
-                        }
-                    })
-
-                    # Re-encrypt existing image file by decrypting using lock_key
-                    # and encrypting using to key.
+                # Re-encrypt existing image file by decrypting using lock_key
+                # and encrypting using to key.
+                file_name = f"{id}{image.file.type_extension}"
+                if image.lock.is_locked:
                     cipher = AES.new(
                         check_key_len(image_lock_key),
                         AES.MODE_GCM,
-                        nonce=image_grid_out.metadata["nonce"]
+                        nonce=image.file.nonce
                     )
-                    decrypted_image_bytes = cipher.decrypt_and_verify(image_grid_out.read(), image_grid_out.metadata["tag"])
-
-                    key, salt = hash_password(to)
-                    nonce = get_random_bytes(12)
-                    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-                    encrypted_image_bytes, tag = cipher.encrypt_and_digest(decrypted_image_bytes)
-
-                    fs_images.delete(id)
-                    fs_images.upload_from_stream_with_id(
-                        id,
-                        f"{id}.bin",
-                        encrypted_image_bytes,
-                        metadata={
-                            "content_type": "application/octet-stream",
-                            "salt": salt,
-                            "nonce": nonce,
-                            "tag": tag
-                        })
-                    return ImageEditResponse(
-                        lock_version=LockVersion.aes128gcm_argon2
-                    )
+                    with open(IMAGES_PATH / file_name, "rb") as file:
+                        file_data = cipher.decrypt_and_verify(file.read(), image.file.tag)
                 else:
-                    image.metadata.data.real_content_type = image.content_type
-                    # Encrypt image metadata
-                    key, salt = hash_password(to)
-                    nonce = get_random_bytes(12)
-                    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+                    with open(IMAGES_PATH / file_name, "rb") as file:
+                        file_data = file.read()
 
-                    encrypted_image_metadata, tag = cipher.encrypt_and_digest(
-                        orjson.dumps(image.metadata.data.dict(exclude_none=True))
-                    )
+                file_key, file_salt = hash_password(to)
+                file_nonce = get_random_bytes(12)
+                cipher = AES.new(file_key, AES.MODE_GCM, nonce=file_nonce)
+                file_data, file_tag = cipher.encrypt_and_digest(file_data)
 
-                    db_images.update_one({
-                        "_id": id
-                    }, {
-                        "$set": {
-                            "content_type": "application/octet-stream",
-                            "metadata": {
-                                "salt": salt,
-                                "nonce": nonce,
-                                "data": encrypted_image_metadata,
-                                "tag": tag
-                            },
-                            "lock": {
-                                "is_locked": True,
-                                "version": LockVersion.aes128gcm_argon2
-                            }
-                        },
-                        "$unset": {
-                            "thumbnail": None
-                        }
-                    })
+                new_file_extension = guess_extension("application/octet-stream")
+                if not image.lock.is_locked:
+                    (IMAGES_PATH / file_name).unlink()
+                with open(IMAGES_PATH / f"{id}{new_file_extension}", "wb") as image_file:
+                    image_file.write(file_data)
 
-                    # Encrypt image file
-                    key, salt = hash_password(to)
-                    nonce = get_random_bytes(12)
-                    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-
-                    image_grid_out = fs_images.open_download_stream(id)
-
-                    encrypted_image_bytes, tag = cipher.encrypt_and_digest(image_grid_out.read())
-
-                    fs_images.delete(id)
-                    fs_images.upload_from_stream_with_id(
-                        id,
-                        image_grid_out.filename,
-                        encrypted_image_bytes,
-                        metadata={
-                            "content_type": "application/octet-stream",
-                            "salt": salt,
-                            "nonce": nonce,
-                            "tag": tag
-                        }
-                    )
-                    try:
-                        fs_thumbnails.delete(id)
-                    except GridFSNoFile:
-                        pass
-                    except Exception as e:
-                        raise e
-                return ImageEditResponse(
-                    lock_version=LockVersion.aes128gcm_argon2
-                )
-            # Remove a lock
-            elif type(to) == bool:
-                cipher = AES.new(check_key_len(metadata_lock_key), AES.MODE_GCM, nonce=image.metadata.nonce)
-                image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag))
-                content_type = image_metadata.real_content_type
-                image_metadata.real_content_type = None
                 db_images.update_one({
                     "_id": id
                 }, {
                     "$set": {
-                        "content_type": content_type,
+                        "lock": {
+                            "is_locked": True,
+                            "version": LockVersion.aes128gcm_argon2
+                        },
+                        "file": {
+                            "content_type": "application/octet-stream",
+                            "type_extension": new_file_extension,
+                            "salt": file_salt,
+                            "nonce": file_nonce,
+                            "tag": file_tag
+                        },
+                        "metadata": {
+                            "salt": metadata_salt,
+                            "nonce": metadata_nonce,
+                            "data": metadata_data,
+                            "tag": metadata_tag
+                        }
+                    },
+                    "$unset": {
+                        "thumbnail": None
+                    }
+                })
+
+                try:
+                    (THUMBNAILS_PATH / file_name).unlink()
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    raise e
+
+                return ImageEditResponse(
+                    lock_version=LockVersion.aes128gcm_argon2,
+                    file=File(
+                        content_type="application/octet-stream",
+                        type_extension=new_file_extension,
+                        salt=file_salt
+                    ),
+                    metadata_salt=metadata_salt
+                )
+            # Remove a lock
+            elif type(to) == bool:
+                cipher = AES.new(
+                    check_key_len(metadata_lock_key),
+                    AES.MODE_GCM,
+                    nonce=image.metadata.nonce
+                )
+                metadata_data = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image.metadata.data, image.metadata.tag))
+                content_type = metadata_data.real_content_type
+                metadata_data.real_content_type = None
+
+                cipher = AES.new(
+                    check_key_len(image_lock_key),
+                    AES.MODE_GCM,
+                    nonce=image.file.nonce
+                )
+                file_name = f"{id}{image.file.type_extension}"
+                new_file_extension = guess_extension(content_type)
+                with (
+                    open(IMAGES_PATH / file_name, "rb") as encrypted_file,
+                    open(IMAGES_PATH / f"{id}{new_file_extension}", "wb") as decrypted_file
+                ):
+                    decrypted_file.write(
+                        cipher.decrypt_and_verify(encrypted_file.read(), image.file.tag)
+                    )
+
+                (IMAGES_PATH / file_name).unlink()
+
+                db_images.update_one({
+                    "_id": id
+                }, {
+                    "$set": {
                         "lock.is_locked": False,
-                        "metadata.data": image_metadata.dict(exclude_none=True),
+                        "file.content_type": content_type,
+                        "file.type_extension": new_file_extension,
+                        "metadata.data": metadata_data.dict(exclude_none=True),
                         "thumbnail": Thumbnail().dict()
                     },
                     "$unset": {
                         "lock.version": None,
+                        "file.salt": None,
+                        "file.nonce": None,
+                        "file.tag": None,
                         "metadata.salt": None,
                         "metadata.nonce": None,
                         "metadata.tag": None
                     }
                 })
-                image_grid_out = fs_images.open_download_stream(id)
-                cipher = AES.new(check_key_len(image_lock_key), AES.MODE_GCM, nonce=image_grid_out.metadata["nonce"])
-                decrypted_image_bytes = cipher.decrypt_and_verify(image_grid_out.read(), image_grid_out.metadata["tag"])
-                fs_images.delete(id)
-                fs_images.upload_from_stream_with_id(
-                    id, image_grid_out.filename, decrypted_image_bytes,
-                    metadata={
-                        "content_type": image_grid_out.metadata["content_type"],
-                    }
+
+                return ImageEditResponse(
+                    file=File(
+                        content_type=content_type,
+                        type_extension=new_file_extension
+                    )
                 )
-                return ImageEditResponse()
             else:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="to has to be either a string or boolean, depending on what you want to modify.")
-            
-
-            
-            

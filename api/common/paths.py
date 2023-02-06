@@ -1,14 +1,11 @@
 from pathlib import Path
 
-from .settings import server_config
+from .settings import api_settings
 
-if not server_config.iamages_storage_dir.exists():
-    server_config.iamages_storage_dir.mkdir()
+IMAGES_PATH = Path(api_settings.storage_dir, "images")
+if not IMAGES_PATH.exists():
+    IMAGES_PATH.mkdir()
 
-FILES_PATH = Path(server_config.iamages_storage_dir, "files")
-if not FILES_PATH.exists():
-    FILES_PATH.mkdir()
-
-THUMBS_PATH = Path(server_config.iamages_storage_dir, "thumbs")
-if not THUMBS_PATH.exists():
-    THUMBS_PATH.mkdir()
+THUMBNAILS_PATH = Path(api_settings.storage_dir, "thumbnails")
+if not THUMBNAILS_PATH.exists():
+    THUMBNAILS_PATH.mkdir()

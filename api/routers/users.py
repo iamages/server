@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from smtplib import SMTP
 from secrets import compare_digest
 
@@ -15,8 +15,7 @@ from gridfs.errors import NoFile
 from pydantic import EmailStr
 from pydantic.errors import EmailError
 
-from ..common.db import (db_collections, db_images, db_users, fs_images,
-                         fs_thumbnails, db)
+from ..common.db import (db_collections, db_images, db_users, db)
 from ..common.security import (ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM,
                                get_user)
 from ..common.settings import api_settings
@@ -26,23 +25,19 @@ from ..models.images import Image
 from ..models.pagination import Pagination
 from ..models.tokens import JWTModal, Token
 from ..models.users import User, UserInDB, PasswordReset, EditableUserInformation
+from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 
 db_password_resets = db.password_resets
 
 def perform_user_delete(username: str):
     db_users.delete_one({"_id": username})
-    image_ids = db_images.find({"owner": username}, {"_id": 1})
-    for image_id_dict in image_ids:
-        image_id = image_id_dict["_id"]
-        db_images.delete_one({"_id": image_id})
-        try:
-            fs_images.delete({"_id": image_id})
-        except NoFile:
-            pass
-        try:
-            fs_thumbnails.delete({"_id": image_id})
-        except NoFile:
-            pass
+    image_ids = db_images.find({"owner": username}, {"_id": 1, "file.type_extension": 1})
+    for image_dict in image_ids:
+        id = image_dict["_id"]
+        db_images.delete_one({"_id": id})
+        filename = f"{id}{image_dict['file']['type_extension']}"
+        (IMAGES_PATH / filename).unlink(True)
+        (THUMBNAILS_PATH / filename).unlink(True)
     db_collections.delete_many({"owner": username})
 
 crypt_context = CryptContext(schemes=["argon2"], deprecated=["auto"])
@@ -189,7 +184,7 @@ def get_password_reset_code(
 
     message = MIMEMultipart('alternative')
     message["Subject"] = "Reset Iamages account password"
-    message["From"] = api_settings.smtp_from
+    message["From"] = formataddr(("Iamages", api_settings.smtp_from)) 
     message["To"] = email
     message.attach(
         MIMEText(
@@ -243,6 +238,14 @@ def reset_password(
 @router.post(
     "/images",
     response_model=list[Image],
+    response_model_exclude={
+        "file": {
+            "salt": ...,
+            "nonce": ...,
+            "tag": ...
+        },
+        "metadata": ...
+    },
     response_model_by_alias=False,
     response_model_exclude_none=True
 )

@@ -14,7 +14,7 @@ const infoModal = {
   }
 }
 if (!image.lock.is_locked) {
-  infoModal.content.contentType.innerText = image.content_type;
+  infoModal.content.contentType.innerText = image.file.content_type;
   infoModal.content.dimensions.innerText = `${image.metadata.data.width}x${image.metadata.data.height}`;
 } else {
   infoModal.content.contentType.innerText = "Unlock image to view";

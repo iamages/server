@@ -9,20 +9,19 @@ An official instance is deployed at https://iamages.jkelol111.me/api, usually us
 2. Install MongoDB.
 3. Install dependencies using `poetry` or `pip3` (both `pyproject.toml` and synced `requirements.txt` available, pick your optimal solution)
 4. Create the database by using `scripts/mkdb.py`.
-5. Start the server using `gunicorn` (a sample startup script is provided as `start_prod_server.sh`).
-
-The following environmental variables may be set to alter the defaults:
-- `IAMAGES_MAX_SIZE`: maximum size of one file (in bytes).
-- `IAMAGES_DB_HOST`: MongoDB login URL to `iamages` database (requires URL encoding)
-- `IAMAGES_JWT_SECRET`: random string used to generate tokens.
-- `IAMAGES_SERVER_OWNER`: name of server owner.
-- `IAMAGES_SERVER_CONTACT`: contact to the server owner (examples include: mailto, tel link).
-- `IAMAGES_SMTP_HOST`: SMTP host address.
-- `IAMAGES_SMTP_PORT`: SMTP host port.
-- `IAMAGES_SMTP_STARTTLS`: SMTP STARTTLS enabled (recommended).
-- `IAMAGES_SMTP_USERNAME`: SMTP username (optional).
-- `IAMAGES_SMTP_PASSWORD`: SMTP password (optional).
-- `IAMAGES_SMTP_FROM`: email address used in `From` fields.
+5. Make a storage directory and update your environment values:
+    - `IAMAGES_MAX_SIZE`: maximum size of one file (in bytes).
+    - `IAMAGES_DB_HOST`: MongoDB login URL to `iamages` database (requires URL encoding)
+    - `IAMAGES_JWT_SECRET`: random string used to generate tokens.
+    - `IAMAGES_SERVER_OWNER`: name of server owner.
+    - `IAMAGES_SERVER_CONTACT`: contact to the server owner (examples include: mailto, tel link).
+    - `IAMAGES_SMTP_HOST`: SMTP host address.
+    - `IAMAGES_SMTP_PORT`: SMTP host port.
+    - `IAMAGES_SMTP_STARTTLS`: SMTP STARTTLS enabled (recommended).
+    - `IAMAGES_SMTP_USERNAME`: SMTP username (optional).
+    - `IAMAGES_SMTP_PASSWORD`: SMTP password (optional).
+    - `IAMAGES_SMTP_FROM`: email address used in `From` fields.
+6. Start the server using `gunicorn` (a sample startup script is provided as `start_prod_server.sh`).
 
 Periodically check back here for new releases/commits, and update the server using step 1 and 2 (3 might be required too, along with 'Using database/storage layout upgrader' below)
 

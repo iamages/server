@@ -1,8 +1,9 @@
-from pydantic import BaseSettings, EmailStr
+from pydantic import BaseSettings, EmailStr, DirectoryPath
 
 class APISettings(BaseSettings):
     max_size: int = 30000000 # 30MB
     db_url: str
+    storage_dir: DirectoryPath
     jwt_secret: str
     server_owner: str
     server_contact: str

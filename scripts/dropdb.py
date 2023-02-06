@@ -1,9 +1,11 @@
 __version__ = "4.0.0"
 __copyright__ = "© jkelol111 et al 2023-present"
 
-from urllib.parse import quote
 from getpass import getpass
+from shutil import rmtree
+from urllib.parse import quote
 
+from common.settings import api_settings
 from pymongo import MongoClient
 
 print(f"[Drop Iamages Database v{__version__} - {__copyright__}]")
@@ -21,3 +23,11 @@ match input("Continue? <y/n> ").lower():
         print("Poof, it's gone.")
     case "n" | _:
         print("Cancelled database drop.")
+
+match input("Wipe storage directory as well? <y/n> ").lower():
+    case "y":
+        rmtree(api_settings.storage_dir)
+        api_settings.storage_dir.mkdir()
+        print("Kazaam, that's also gone.")
+    case "n":
+        print("Storage directory not wiped.")
