@@ -51,7 +51,7 @@ def create_thumbnail(image: ImageInDB):
 
             if fstat(image_file.fileno()).st_size < getsizeof(temporary):
                 set_unavailable(image.id)
-                return
+                return False
             
             with open(THUMBNAILS_PATH / file_name, "wb") as thumbnail_file:
                 thumbnail_file.write(temporary.getvalue())
@@ -61,6 +61,7 @@ def create_thumbnail(image: ImageInDB):
                     "thumbnail.is_computing": False
                 }
             })
+            return True
     except Exception as e:
         set_unavailable(image.id)
         raise e
@@ -140,7 +141,8 @@ def get_thumbnail(
     except FileNotFoundError:
         if not image.thumbnail.is_unavailable:
             try:
-                create_thumbnail(image)
+                if not create_thumbnail(image):
+                    return return_redirect_response(image, request)
                 return return_file_response(image)
             except Exception as e:
                 print_exception(e)
