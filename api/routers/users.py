@@ -2,20 +2,21 @@ from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
-from smtplib import SMTP
 from secrets import compare_digest
+from smtplib import SMTP
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks, Request, Response
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
+                     Request, Response, status)
 from fastapi.security import OAuth2PasswordRequestFormStrict
 from jose import jwt
 from passlib.context import CryptContext
-from pymongo import DESCENDING
-from pymongo.errors import DuplicateKeyError
-from gridfs.errors import NoFile
 from pydantic import EmailStr
 from pydantic.errors import EmailError
+from pymongo import DESCENDING
+from pymongo.errors import DuplicateKeyError
 
-from ..common.db import (db_collections, db_images, db_users, db)
+from ..common.db import db, db_collections, db_images, db_users
+from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from ..common.security import (ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM,
                                get_user)
 from ..common.settings import api_settings
@@ -24,8 +25,8 @@ from ..models.collections import Collection
 from ..models.images import Image
 from ..models.pagination import Pagination
 from ..models.tokens import JWTModal, Token
-from ..models.users import User, UserInDB, PasswordReset, EditableUserInformation
-from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
+from ..models.users import (EditableUserInformation, PasswordReset, User,
+                            UserInDB)
 
 db_password_resets = db.password_resets
 

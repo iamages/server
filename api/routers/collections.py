@@ -1,18 +1,19 @@
 from secrets import compare_digest
 
-from fastapi import APIRouter, Depends, status, HTTPException, Body, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pymongo import DESCENDING
 
 from ..common.db import db_collections, db_images
 from ..common.security import get_optional_user, get_user
 from ..common.templates import templates
-
+from ..models.collections import (Collection, EditableCollectionInformation,
+                                  NewCollection)
 from ..models.default import PyObjectId
-from ..models.collections import Collection, NewCollection, EditableCollectionInformation
-from ..models.users import User
 from ..models.images import Image, ImageInDB
 from ..models.pagination import Pagination
+from ..models.users import User
+
 
 def add_images(collection_id: PyObjectId, image_ids: list[PyObjectId], user: User | None):
     for image_id in image_ids:
