@@ -73,8 +73,7 @@ with ZipFile(archive_file) as z:
                 created_on=datetime.fromisoformat(user["created"]).replace(microsecond=0),
                 password=user["password"]
             )
-            # db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
-    print(excluded_users)
+            db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
     print("3/3: Migrating images.")
     with z.open("files.csv", "r") as f:
         for file_dict in tqdm(DictReader(TextIOWrapper(f, "utf-8"))):
@@ -100,23 +99,21 @@ with ZipFile(archive_file) as z:
             )
             if file_dict["collection"] in collections_map:
                 image.collections = [collections_map[file_dict["collection"]]]
-            # db_images.insert_one(
-            #     image.dict(
-            #         by_alias=True,
-            #         exclude_none=True,
-            #         exclude={
-            #             "created_on": ...,
-            #             "lock": {"upgradable": ...}
-            #         }
-            #     )
-            # )
-            # with (
-            #     z.open(f"files/{file_dict['file']}", "r") as old_image,
-            #     open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as new_image
-            # ):
-            #     copyfileobj(old_image, new_image)
-    
-
+            db_images.insert_one(
+                image.dict(
+                    by_alias=True,
+                    exclude_none=True,
+                    exclude={
+                        "created_on": ...,
+                        "lock": {"upgradable": ...}
+                    }
+                )
+            )
+            with (
+                z.open(f"files/{file_dict['file']}", "r") as old_image,
+                open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as new_image
+            ):
+                copyfileobj(old_image, new_image)
 print("\nDone! Verify everything has been transfered over.")
     
 
