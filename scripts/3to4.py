@@ -1,4 +1,5 @@
 import json
+import re
 from argparse import ArgumentParser
 from csv import DictReader
 from datetime import datetime
@@ -60,12 +61,27 @@ with ZipFile(archive_file) as z:
             )
             collections_map[collection_dict["id"]] = collection.id
             db_collections.insert_one(collection.dict(by_alias=True, exclude_none=True, exclude={"created_on"}))
-    print("2/: Migrating images.")
+    excluded_users = []
+    print("2/: Migrating users")
+    with z.open("users.csv", "r") as u:
+        for user in tqdm(DictReader(TextIOWrapper(u, "utf-8"))):
+            if re.search(r"[\\s]", user["username"]):
+                excluded_users.append(user["username"])
+                continue
+            user = UserInDB(
+                username=user["username"],
+                created_on=datetime.fromisoformat(user["created"]).replace(microsecond=0),
+                password=user["password"]
+            )
+            db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
+    print("3/: Migrating images.")
     with z.open("files.csv", "r") as f:
         for file_dict in tqdm(DictReader(TextIOWrapper(f, "utf-8"))):
+            if file_dict["owner"] == "" or file_dict["owner"] in excluded_users:
+                continue
             image = ImageInDB(
                 created_on=datetime.fromisoformat(file_dict["created"]),
-                owner=file_dict["owner"] if len(file_dict["owner"]) != 0 else None,
+                owner=file_dict["owner"],
                 is_private=True if file_dict["private"] == 'True' else False,
                 lock=Lock(is_locked=False),
                 file=File(
@@ -99,14 +115,7 @@ with ZipFile(archive_file) as z:
             ):
                 copyfileobj(old_image, new_image)
     print("3/: Migrating users.")
-    with z.open("users.csv", "r") as u:
-        for user in tqdm(DictReader(TextIOWrapper(u, "utf-8"))):
-            user = UserInDB(
-                username=user["username"],
-                created_on=datetime.fromisoformat(user["created"]).replace(microsecond=0),
-                password=user["password"]
-            )
-            db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
+    
 
 print("\nDone! Verify everything has been transfered over.")
     
