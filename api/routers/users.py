@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
@@ -227,6 +227,8 @@ def reset_password(
     if not password_reset_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     password_reset = PasswordReset.parse_obj(password_reset_dict)
+    if (datetime.now(timezone.utc) - password_reset.created_on).total_seconds() > 900:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="The code has expired.")
     if not compare_digest(code, password_reset.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="The password reset code is incorrect.")
     db_users.update_one({"_id": user_dict["_id"]}, {
