@@ -28,7 +28,7 @@ archive_file_hash = Path(archive_file.parent, archive_file.stem).with_suffix(".b
 
 print("[Iamages v3 to v4 Migration Tool - (C) 2022 jkelol111 et al.]")
 
-print("0/: Checking archive version")
+print("0/3: Checking archive version")
 if not args.skip_hash_check:
     hash = blake2b()
     with open(archive_file, "rb") as f:
@@ -50,7 +50,7 @@ with ZipFile(archive_file) as z:
     IMAGES_PATH.mkdir()
     rmtree(THUMBNAILS_PATH)
 
-    print("1/: Migrating collections.")
+    print("1/3: Migrating collections.")
     collections_map = {}
     with z.open("collections.csv", "r") as c:
         for collection_dict in tqdm(DictReader(TextIOWrapper(c, "utf-8"))):
@@ -62,10 +62,10 @@ with ZipFile(archive_file) as z:
             collections_map[collection_dict["id"]] = collection.id
             db_collections.insert_one(collection.dict(by_alias=True, exclude_none=True, exclude={"created_on"}))
     excluded_users = []
-    print("2/: Migrating users")
+    print("2/3: Migrating users")
     with z.open("users.csv", "r") as u:
         for user in tqdm(DictReader(TextIOWrapper(u, "utf-8"))):
-            if re.search(r"[\\s]", user["username"]):
+            if re.search(" +", user["username"]):
                 excluded_users.append(user["username"])
                 continue
             user = UserInDB(
@@ -73,8 +73,9 @@ with ZipFile(archive_file) as z:
                 created_on=datetime.fromisoformat(user["created"]).replace(microsecond=0),
                 password=user["password"]
             )
-            db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
-    print("3/: Migrating images.")
+            # db_users.insert_one(user.dict(by_alias=True, exclude_none=True))
+    print(excluded_users)
+    print("3/3: Migrating images.")
     with z.open("files.csv", "r") as f:
         for file_dict in tqdm(DictReader(TextIOWrapper(f, "utf-8"))):
             if file_dict["owner"] == "" or file_dict["owner"] in excluded_users:
@@ -99,22 +100,21 @@ with ZipFile(archive_file) as z:
             )
             if file_dict["collection"] in collections_map:
                 image.collections = [collections_map[file_dict["collection"]]]
-            db_images.insert_one(
-                image.dict(
-                    by_alias=True,
-                    exclude_none=True,
-                    exclude={
-                        "created_on": ...,
-                        "lock": {"upgradable": ...}
-                    }
-                )
-            )
-            with (
-                z.open(f"files/{file_dict['file']}", "r") as old_image,
-                open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as new_image
-            ):
-                copyfileobj(old_image, new_image)
-    print("3/: Migrating users.")
+            # db_images.insert_one(
+            #     image.dict(
+            #         by_alias=True,
+            #         exclude_none=True,
+            #         exclude={
+            #             "created_on": ...,
+            #             "lock": {"upgradable": ...}
+            #         }
+            #     )
+            # )
+            # with (
+            #     z.open(f"files/{file_dict['file']}", "r") as old_image,
+            #     open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as new_image
+            # ):
+            #     copyfileobj(old_image, new_image)
     
 
 print("\nDone! Verify everything has been transfered over.")
