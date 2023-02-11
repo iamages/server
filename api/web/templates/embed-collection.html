@@ -43,7 +43,7 @@
                 {% for image in column -%}
                   <a href="{{ url_for('get_image_embed', id=image.id) }}" target="_blank">
                     <figure class="image is-square">
-                      <img src="{{ url_for('get_thumbnail', id=image.id, extension=image.file.name.split('.')[1]) }}" alt="Thumbnail for: {{image.id}}" style="object-fit: cover;">
+                      <img src="{{ url_for('get_thumbnail', id=image.id, extension=image.file.type_extension.lstrip('.')) }}" alt="Thumbnail for: {{image.id}}" style="object-fit: cover;">
                     </figure>
                   </a>
                   <br>

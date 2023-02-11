@@ -179,7 +179,7 @@ def get_password_reset_code(
     try:
         db_password_resets.insert_one(password_reset.dict(by_alias=True))
     except DuplicateKeyError:
-        return Response(status.HTTP_200_OK)
+        return Response(status_code=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
 
