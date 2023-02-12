@@ -1,14 +1,12 @@
-from os import fstat
 from secrets import compare_digest
+from shutil import copyfileobj
+from tempfile import SpooledTemporaryFile
 from traceback import print_exception
 
-from fastapi import (APIRouter, Depends, HTTPException,
-                     Request, status)
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse, RedirectResponse
 from PIL import Image as PillowImage
 from PIL.Image import LANCZOS
-from io import BytesIO
-from sys import getsizeof
 
 from ..common.db import db_images
 from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
@@ -16,6 +14,7 @@ from ..common.security import get_optional_user
 from ..models.default import PyObjectId
 from ..models.images import ImageInDB
 from ..models.users import User
+
 
 def set_unavailable(id: PyObjectId):
     db_images.update_one({
@@ -38,30 +37,29 @@ def create_thumbnail(image: ImageInDB):
 
     try:
         file_name = f"{image.id}{image.file.type_extension}"
-        with (
-            open(IMAGES_PATH / file_name, "rb") as image_file,
-            BytesIO() as temporary
-        ):
-            with PillowImage.open(image_file) as pil_image:
-                pil_image.thumbnail((512, 512), LANCZOS)
-                if image.file.content_type == "image/gif":
-                    pil_image.save(temporary, "gif", save_all=True)
-                else:
-                    pil_image.save(temporary, image.file.content_type.split("/")[1])
+        with SpooledTemporaryFile() as temporary:
+            image_file_path = IMAGES_PATH / file_name
 
-            if fstat(image_file.fileno()).st_size < getsizeof(temporary):
+            pil_image = PillowImage.open(image_file_path)
+            pil_image.thumbnail((512, 512), LANCZOS)
+            pil_image.save(temporary, pil_image.format, save_all=getattr(pil_image, "is_animated", False))
+            pil_image.close()
+
+            if image_file_path.stat().st_size < temporary.tell():
                 set_unavailable(image.id)
                 return False
-            
-            with open(THUMBNAILS_PATH / file_name, "wb") as thumbnail_file:
-                thumbnail_file.write(temporary.getvalue())
 
-            db_images.update_one({"_id": image.id}, {
-                "$set": {
-                    "thumbnail.is_computing": False
-                }
-            })
-            return True
+            temporary.seek(0)
+
+            with open(THUMBNAILS_PATH / file_name, "wb") as thumbnail_file:
+                copyfileobj(temporary, thumbnail_file)
+
+        db_images.update_one({"_id": image.id}, {
+            "$set": {
+                "thumbnail.is_computing": False
+            }
+        })
+        return True
     except Exception as e:
         set_unavailable(image.id)
         raise e

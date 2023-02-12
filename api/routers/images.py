@@ -1,7 +1,8 @@
 from base64 import b64decode, b64encode
-from io import BytesIO
 from mimetypes import guess_extension
 from secrets import compare_digest
+from shutil import copyfileobj
+from tempfile import SpooledTemporaryFile
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
@@ -12,8 +13,7 @@ from Crypto.Random import get_random_bytes
 from fastapi import (APIRouter, Body, Depends, Form, Header, HTTPException,
                      Request, UploadFile, status)
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import (FileResponse, HTMLResponse, Response,
-                               StreamingResponse)
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from passlib.hash import argon2
 from PIL import Image as PillowImage
 from PIL.ImageOps import exif_transpose
@@ -113,7 +113,8 @@ def upload_image(
 
     if information.is_private and not user:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="You cannot set file to private without being logged in.")
-
+        
+    
     size = check_file_size(file.file)
 
     mime = magic.from_buffer(file.file.read(2048 if size >= 2048 else size), mime=True)
@@ -124,94 +125,85 @@ def upload_image(
 
     file.file.seek(0)
 
-    with PillowImage.open(file.file) as original_file:
-        width, height = original_file.size
+    original_pil_image = PillowImage.open(file.file)
+    # Correct orientation
+    transposed_pil_image = exif_transpose(original_pil_image)
+    width, height = transposed_pil_image.size
+    transposed_pil_image.format = original_pil_image.format
+    original_pil_image.close()
 
-        image_metadata = ImageMetadata(
-            description=information.description,
-            width=width,
-            height=height,
-            real_content_type=mime if information.is_locked else None
+    image_metadata = ImageMetadata(
+        description=information.description,
+        width=width,
+        height=height,
+        real_content_type=mime if information.is_locked else None
+    )
+
+    image_metadata_bytes = None
+    nonce = None
+    tag = None
+    key = None
+    salt = None
+
+    if information.is_locked:
+        image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
+        key, salt = hash_password(information.lock_key)
+
+        nonce = get_random_bytes(12)
+
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+
+        image_metadata_bytes, tag = cipher.encrypt_and_digest(image_metadata_bytes)
+
+    image = ImageInDB(
+        is_private=information.is_private,
+        lock=Lock(
+            is_locked=information.is_locked,
+            version=LockVersion.aes128gcm_argon2 if information.is_locked else None
+        ),
+        file=File(
+            content_type="application/octet-stream" if information.is_locked else mime,
+            type_extension=guess_extension("application/octet-stream") if information.is_locked else guess_extension(mime)
+        ),
+        metadata=ImageMetadataContainer(
+            salt=salt,
+            nonce=nonce,
+            data=image_metadata_bytes if information.is_locked else image_metadata,
+            tag=tag,
         )
+    )
+    if user:
+        image.owner = user.username
+    else:
+        ownerless_key = uuid4()
+        image.ownerless_key = ownerless_key
+        response.headers["X-Iamages-Ownerless-Key"] = str(ownerless_key)
+    if not information.is_locked:
+        image.thumbnail = Thumbnail()
 
-        image_metadata_bytes = None
-        nonce = None
-        tag = None
-
-        key = None
-        salt = None
+    with SpooledTemporaryFile() as temporary:
+        transposed_pil_image.save(temporary, format=transposed_pil_image.format, save_all=getattr(transposed_pil_image, "is_animated", False))
+        transposed_pil_image.close()
 
         if information.is_locked:
-            image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
             key, salt = hash_password(information.lock_key)
+            image.file.salt = salt
 
             nonce = get_random_bytes(12)
+            image.file.nonce = nonce
 
             cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
 
-            image_metadata_bytes, tag = cipher.encrypt_and_digest(image_metadata_bytes)
+            encrypted_image_bytes, tag = cipher.encrypt_and_digest(temporary.read())
+            temporary.seek(0)
+            temporary.write(encrypted_image_bytes)
 
-        image = ImageInDB(
-            is_private=information.is_private,
-            lock=Lock(
-                is_locked=information.is_locked,
-                version=LockVersion.aes128gcm_argon2 if information.is_locked else None
-            ),
-            file=File(
-                content_type="application/octet-stream" if information.is_locked else mime,
-                type_extension=guess_extension("application/octet-stream") if information.is_locked else guess_extension(mime)
-            ),
-            metadata=ImageMetadataContainer(
-                salt=salt,
-                nonce=nonce,
-                data=image_metadata_bytes if information.is_locked else image_metadata,
-                tag=tag,
-            )
-        )
+            image.file.tag = tag
 
-        if user:
-            image.owner = user.username
-        if not information.is_locked:
-            image.thumbnail = Thumbnail()
+        temporary.seek(0)
 
-        original_file_format = original_file.format
-        # Correct orientation
-        original_file = exif_transpose(original_file)
-        with (
-            PillowImage.new(original_file.mode, original_file.size) as pil_image,
-            BytesIO() as temporary
-        ):
-            pil_image.putdata(original_file.getdata())
-
-            if mime == "image/gif":
-                pil_image.save(temporary, format=original_file_format, save_all=True)
-            else:
-                pil_image.save(temporary, format=original_file_format)
-
-            processed_image = temporary.getvalue()
-
-            if information.is_locked:
-                key, salt = hash_password(information.lock_key)
-                image.file.salt = salt
-
-                nonce = get_random_bytes(12)
-                image.file.nonce = nonce
-
-                cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-
-                processed_image, tag = cipher.encrypt_and_digest(processed_image)
-                processed_image = BytesIO(processed_image).getvalue()
-
-                image.file.tag = tag
-
-            with open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as image_file:
-                image_file.write(processed_image)
-
-    if not user:
-        ownerless_key = uuid4()
-        image.ownerless_key = ownerless_key
-
-        response.headers["X-Iamages-Ownerless-Key"] = str(ownerless_key)
+        with open(IMAGES_PATH / f"{image.id}{image.file.type_extension}", "wb") as image_file:
+            copyfileobj(temporary, image_file)
 
     db_images.insert_one(
         image.dict(by_alias=True, exclude_none=True, exclude={
@@ -225,7 +217,7 @@ def upload_image(
 @router.api_route(
     "/{id}.{extension}",
     methods=["GET", "HEAD"],
-    response_class=StreamingResponse
+    response_class=FileResponse
 )
 def get_image_file(
     id: PyObjectId,
