@@ -139,21 +139,15 @@ def upload_image(
         real_content_type=mime if information.is_locked else None
     )
 
-    image_metadata_bytes = None
-    nonce = None
-    tag = None
-    key = None
-    salt = None
-
     if information.is_locked:
         image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
-        key, salt = hash_password(information.lock_key)
+        metadata_key, metadata_salt = hash_password(information.lock_key)
 
-        nonce = get_random_bytes(12)
+        metadata_nonce = get_random_bytes(12)
 
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        cipher = AES.new(metadata_key, AES.MODE_GCM, nonce=metadata_nonce)
 
-        image_metadata_bytes, tag = cipher.encrypt_and_digest(image_metadata_bytes)
+        image_metadata_bytes, metadata_tag = cipher.encrypt_and_digest(image_metadata_bytes)
 
     image = ImageInDB(
         is_private=information.is_private,
@@ -166,10 +160,10 @@ def upload_image(
             type_extension=guess_extension("application/octet-stream") if information.is_locked else guess_extension(mime)
         ),
         metadata=ImageMetadataContainer(
-            salt=salt,
-            nonce=nonce,
+            salt=metadata_salt,
+            nonce=metadata_nonce,
             data=image_metadata_bytes if information.is_locked else image_metadata,
-            tag=tag,
+            tag=metadata_tag,
         )
     )
     if user:
@@ -186,19 +180,19 @@ def upload_image(
         transposed_pil_image.close()
 
         if information.is_locked:
-            key, salt = hash_password(information.lock_key)
-            image.file.salt = salt
+            file_key, file_salt = hash_password(information.lock_key)
+            image.file.salt = file_salt
 
-            nonce = get_random_bytes(12)
-            image.file.nonce = nonce
+            file_nonce = get_random_bytes(12)
+            image.file.nonce = file_nonce
 
-            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+            cipher = AES.new(file_key, AES.MODE_GCM, nonce=file_nonce)
 
-            encrypted_image_bytes, tag = cipher.encrypt_and_digest(temporary.read())
+            temporary.seek(0)
+            encrypted_image_bytes, file_tag = cipher.encrypt_and_digest(temporary.read())
+            image.file.tag = file_tag
             temporary.seek(0)
             temporary.write(encrypted_image_bytes)
-
-            image.file.tag = tag
 
         temporary.seek(0)
 
