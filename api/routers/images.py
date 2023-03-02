@@ -139,7 +139,9 @@ def upload_image(
         real_content_type=mime if information.is_locked else None
     )
 
-    metadata_salt, metadata_nonce, metadata_tag = None
+    metadata_salt = None
+    metadata_nonce = None
+    metadata_tag = None
 
     if information.is_locked:
         image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
