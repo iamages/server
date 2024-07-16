@@ -1,1 +1,1 @@
-uvicorn api.main:app --reload
+uvicorn api.main:app --reload --log-level debug

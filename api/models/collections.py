@@ -1,26 +1,28 @@
-from datetime import datetime
-from typing import Optional
 from enum import Enum
+from typing import Annotated
+from datetime import datetime
 
-from pydantic import BaseModel, root_validator, constr
+from pydantic import BaseModel, StringConstraints, computed_field
+from pydantic_mongo import PydanticObjectId
 
-from .default import DefaultModel, PyObjectId
+from .default import DefaultModel
 
 class Collection(DefaultModel):
-    created_on: Optional[datetime]
-    owner: Optional[str]
+    @computed_field
+    @property
+    def created_on(self) -> datetime | None:
+        if not self.id:
+            return None
+        return self.id.generation_time
+    owner: str | None = None
     is_private: bool
-    description: constr(min_length=1, max_length=255)
+    description: Annotated[str, StringConstraints(min_length=1, max_length=255)] 
 
-    @root_validator
-    def get_created_date(cls, values) -> dict:
-        values["created_on"] = values["id"].generation_time
-        return values
 
 class NewCollection(BaseModel):
     is_private: bool
-    description: constr(min_length=1, max_length=255)
-    image_ids: list[PyObjectId] = []
+    description: Annotated[str, StringConstraints(min_length=1, max_length=255)] 
+    image_ids: list[PydanticObjectId] = []
 
 class EditableCollectionInformation(str, Enum):
     description = "description"
