@@ -1,4 +1,5 @@
-from pydantic import BaseSettings, EmailStr, DirectoryPath
+from pydantic import EmailStr, DirectoryPath, Field
+from pydantic_settings import BaseSettings
 
 class APISettings(BaseSettings):
     max_size: int = 30000000 # 30MB
@@ -10,8 +11,8 @@ class APISettings(BaseSettings):
     smtp_host: str
     smtp_port: int
     smtp_starttls: bool
-    smtp_username: str | None
-    smtp_password: str | None
+    smtp_username: str | None = Field(None)
+    smtp_password: str | None = Field(None)
     smtp_from: EmailStr
 
     class Config:

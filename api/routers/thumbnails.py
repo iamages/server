@@ -6,17 +6,17 @@ from traceback import print_exception
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
 from PIL import Image as PillowImage
-from PIL.Image import LANCZOS
+from PIL.Image import Resampling
+from pydantic_mongo import PydanticObjectId
 
 from ..common.db import db_images
 from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from ..common.security import get_optional_user
-from ..models.default import PyObjectId
 from ..models.images import ImageInDB
 from ..models.users import User
 
 
-def set_unavailable(id: PyObjectId):
+def set_unavailable(id: PydanticObjectId):
     db_images.update_one({
         "_id": id
     }, {
@@ -41,7 +41,7 @@ def create_thumbnail(image: ImageInDB):
             image_file_path = IMAGES_PATH / file_name
 
             pil_image = PillowImage.open(image_file_path)
-            pil_image.thumbnail((512, 512), LANCZOS)
+            pil_image.thumbnail((1024, 1024), Resampling.LANCZOS)
             pil_image.save(temporary, pil_image.format, save_all=getattr(pil_image, "is_animated", False))
             pil_image.close()
 
@@ -106,7 +106,7 @@ router = APIRouter(prefix="/thumbnails")
     }
 )
 def get_thumbnail(
-    id: PyObjectId,
+    id: PydanticObjectId,
     extension: str,
     request: Request,
     user: User | None = Depends(get_optional_user)
@@ -118,7 +118,7 @@ def get_thumbnail(
     if not image_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Image doesn't exist.")
 
-    image = ImageInDB.parse_obj(image_dict)
+    image = ImageInDB.model_validate(image_dict)
 
     if image.lock.is_locked:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Thumbnails are unavailable for this image.")

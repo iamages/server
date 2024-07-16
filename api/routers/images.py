@@ -18,21 +18,23 @@ from passlib.hash import argon2
 from PIL import Image as PillowImage
 from PIL.ImageOps import exif_transpose
 from pydantic import Json
-from pydantic.json import ENCODERS_BY_TYPE
+from pydantic_mongo import PydanticObjectId
 
 from ..common.db import db_images
 from ..common.paths import IMAGES_PATH, THUMBNAILS_PATH
 from ..common.security import get_optional_user, get_user
 from ..common.settings import api_settings
 from ..common.templates import templates
-from ..models.default import PyObjectId
 from ..models.images import (EditableImageInformation, File, Image,
                              ImageEditResponse, ImageInDB, ImageMetadata,
                              ImageMetadataContainer, ImageUpload, Lock,
                              LockVersion, Thumbnail)
 from ..models.users import User
 
-ENCODERS_BY_TYPE[bytes] = lambda b: b64encode(b).decode("utf-8")
+# from pydantic.json import ENCODERS_BY_TYPE
+
+
+# ENCODERS_BY_TYPE[bytes] = lambda b: b64encode(b).decode("utf-8")
 
 SUPPORTED_MIME_TYPES = [
     "image/jpeg",
@@ -50,7 +52,7 @@ def check_file_size(file: BinaryIO) -> int:
     file.seek(0)
     return real_file_size
 
-def hash_password(key: str, salt: bytes = None) -> tuple[bytes, bytes]:
+def hash_password(key: str, salt: bytes | None = None) -> tuple[bytes, bytes]:
     # Follow recommended rfc9106 parameters.
     hasher = argon2.using(
         salt=salt,
@@ -64,7 +66,7 @@ def hash_password(key: str, salt: bytes = None) -> tuple[bytes, bytes]:
     # Incorrect padding fix.
     return (b64decode(hashed_key[-1] + "=="), b64decode(hashed_key[-2] + "=="))
 
-def get_image_in_db(id: PyObjectId, user: User | None) -> ImageInDB:
+def get_image_in_db(id: PydanticObjectId, user: User | None) -> ImageInDB:
     image_dict = db_images.find_one({
         "_id": id
     })
@@ -72,7 +74,7 @@ def get_image_in_db(id: PyObjectId, user: User | None) -> ImageInDB:
     if not image_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-    image = ImageInDB.parse_obj(image_dict)
+    image = ImageInDB.model_validate(image_dict)
 
     if image.is_private and (not user or image.owner != user.username):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to view this image.")
@@ -144,7 +146,7 @@ def upload_image(
     metadata_tag = None
 
     if information.is_locked:
-        image_metadata_bytes = orjson.dumps(image_metadata.dict(exclude_none=True))
+        image_metadata_bytes = orjson.dumps(image_metadata.model_dump(exclude_none=True))
         metadata_key, metadata_salt = hash_password(information.lock_key)
 
         metadata_nonce = get_random_bytes(12)
@@ -204,13 +206,13 @@ def upload_image(
             copyfileobj(temporary, image_file)
 
     db_images.insert_one(
-        image.dict(by_alias=True, exclude_none=True, exclude={
+        image.model_dump(by_alias=True, exclude_none=True, exclude={
             "created_on": ...,
             "lock": {"upgradable": ...}
         })
     )
 
-    return image.dict()
+    return image.model_dump()
 
 @router.api_route(
     "/{id}.{extension}",
@@ -218,7 +220,7 @@ def upload_image(
     response_class=FileResponse
 )
 def get_image_file(
-    id: PyObjectId,
+    id: PydanticObjectId,
     extension: str,
     user: User | None = Depends(get_optional_user)
 ):
@@ -260,7 +262,7 @@ def get_image_file(
     response_model_exclude_none=True
 )
 def get_image_information(
-    id: PyObjectId,
+    id: PydanticObjectId,
     user: User | None = Depends(get_optional_user)
 ):
     return get_image_in_db(id, user)
@@ -271,7 +273,7 @@ def get_image_information(
     response_model_exclude_none=True
 )
 def get_image_metadata(
-    id: PyObjectId,
+    id: PydanticObjectId,
     user: User | None = Depends(get_optional_user)
 ):
     image = get_image_in_db(id, user)
@@ -290,7 +292,7 @@ def get_image_metadata(
     response_class=HTMLResponse
 )
 def get_image_embed(
-    id: PyObjectId,
+    id: PydanticObjectId,
     request: Request
 ):
     image = get_image_in_db(id, None)
@@ -315,7 +317,7 @@ def get_image_embed(
     status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_image(
-    id: PyObjectId,
+    id: PydanticObjectId,
     user: User | None = Depends(get_optional_user),
     ownerless_key: UUID | None = Header(None, alias="x-iamages-ownerless-key")
 ):
@@ -324,7 +326,7 @@ def delete_image(
     if not image_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
-    image = ImageInDB.parse_obj(image_dict)
+    image = ImageInDB.model_validate(image_dict)
 
     if not user:
         if not ownerless_key:
@@ -357,7 +359,7 @@ def delete_image(
     response_model_exclude_none=True
 )
 def patch_image_information(
-    id: PyObjectId,
+    id: PydanticObjectId,
     change: EditableImageInformation = Body(...),
     to: bool | str = Body(...),
     metadata_lock_key: str | None = Body(None),
@@ -367,7 +369,7 @@ def patch_image_information(
     image_dict = db_images.find_one({"_id": id})
     if not image_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    image = ImageInDB.parse_obj(image_dict)
+    image = ImageInDB.model_validate(image_dict)
 
     if not compare_digest(image.owner, user.username):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="You don't have permission to modify this image's information.")
@@ -392,14 +394,14 @@ def patch_image_information(
             if image.lock.is_locked:
                 metadata_lock_key_bytes = check_key_len(metadata_lock_key)
                 cipher = AES.new(metadata_lock_key_bytes, AES.MODE_GCM, nonce=image.metadata.nonce)
-                image_metadata = ImageMetadata.parse_raw(cipher.decrypt_and_verify(image_metadata, image.metadata.tag))
+                image_metadata = ImageMetadata.model_validate_json(cipher.decrypt_and_verify(image_metadata, image.metadata.tag))
             image_metadata.description = to
 
             nonce = None
             tag = None
 
             if image.lock.is_locked:
-                image_metadata = orjson.dumps(image_metadata.dict())
+                image_metadata = orjson.dumps(image_metadata.model_dump())
                 nonce = get_random_bytes(12)
                 cipher = AES.new(metadata_lock_key_bytes, AES.MODE_GCM, nonce=nonce)
                 image_metadata, tag = cipher.encrypt_and_digest(image_metadata)
@@ -413,7 +415,7 @@ def patch_image_information(
 
             update_dict = {
                 "$set": {
-                    "metadata": metadata_object.dict(exclude_none=True)
+                    "metadata": metadata_object.model_dump(exclude_none=True)
                 }
             }
             db_images.update_one({"_id": id}, update_dict)

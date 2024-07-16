@@ -1,26 +1,27 @@
 from secrets import compare_digest
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, Path
+from typing import Annotated
 from fastapi.responses import HTMLResponse
 from pymongo import DESCENDING
+from pydantic_mongo import PydanticObjectId
 
 from ..common.db import db_collections, db_images
 from ..common.security import get_optional_user, get_user
 from ..common.templates import templates
 from ..models.collections import (Collection, EditableCollectionInformation,
                                   NewCollection)
-from ..models.default import PyObjectId
 from ..models.images import Image, ImageInDB
 from ..models.pagination import Pagination
 from ..models.users import User
 
 
-def add_images(collection_id: PyObjectId, image_ids: list[PyObjectId], user: User | None):
+def add_images(collection_id: PydanticObjectId, image_ids: list[PydanticObjectId], user: User | None):
     for image_id in image_ids:
         image_dict = db_images.find_one({"_id": image_id})
         if not image_dict:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"The image '{image_id}' does not exist.")
-        image = ImageInDB.parse_obj(image_dict)
+        image = ImageInDB.model_validate(image_dict)
         if image.is_private and not compare_digest(image.owner, user.username):
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail=f"You don't have permission to access the image '{image_id}'.")
         if image_id in image.collections:
@@ -46,16 +47,16 @@ def new_collection(
         is_private=new_collection.is_private,
         description=new_collection.description
     )
-    db_collections.insert_one(collection.dict(by_alias=True, exclude={"created_on"}, exclude_none=True))
+    db_collections.insert_one(collection.model_dump(by_alias=True, exclude={"created_on"}, exclude_none=True))
     # Validate images list.
     add_images(collection.id, new_collection.image_ids, user)
     return collection
 
-def get_collection_in_db(id: PyObjectId, user: User | None) -> Collection:
+def get_collection_in_db(id: PydanticObjectId, user: User | None) -> Collection:
     collection_dict = db_collections.find_one({"_id": id})
     if not collection_dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    collection = Collection.parse_obj(collection_dict)
+    collection = Collection.model_validate(collection_dict)
     if collection.is_private and (not user or not compare_digest(user.username, collection.owner)):
         raise HTTPException(status.HTTP_403_FORBIDDEN)
     return collection
@@ -67,7 +68,7 @@ def get_collection_in_db(id: PyObjectId, user: User | None) -> Collection:
     response_model_exclude_none=True
 )
 def get_collection(
-    id: PyObjectId,
+    id: Annotated[PydanticObjectId, Path(...)],
     user: User | None = Depends(get_optional_user)
 ):
     return get_collection_in_db(id, user)
@@ -77,9 +78,9 @@ def get_collection(
     status_code=status.HTTP_204_NO_CONTENT
 )
 def edit_collection(
-    id: PyObjectId,
+    id: PydanticObjectId,
     change: EditableCollectionInformation = Body(...),
-    to: bool | str | list[PyObjectId] = Body(...),
+    to: bool | str | list[PydanticObjectId] = Body(...),
     user: User = Depends(get_user)
 ):
     get_collection_in_db(id, user)
@@ -115,7 +116,7 @@ def edit_collection(
     status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_collection(
-    id: PyObjectId,
+    id: PydanticObjectId,
     user: User = Depends(get_user)
 ):
     get_collection_in_db(id, user)
@@ -130,14 +131,14 @@ def delete_collection(
     response_class=HTMLResponse
 )
 def get_collection_embed(
-    id: PyObjectId,
+    id: PydanticObjectId,
     request: Request
 ):
     return templates.TemplateResponse("embed-collection.html", {
         "request": request,
         "collection": get_collection_in_db(id, None),
         "images": list(map( 
-            lambda i: Image.parse_obj(i),
+            lambda i: Image.model_validate(i),
             db_images.find({
                 "collections": id,
                 "is_private": False
@@ -152,7 +153,7 @@ def get_collection_embed(
     response_model_exclude_none=True
 )
 def get_collection_images(
-    id: PyObjectId,
+    id: PydanticObjectId,
     pagination: Pagination,
     user: User | None = Depends(get_optional_user)
 ):
@@ -171,7 +172,7 @@ def get_collection_images(
         }
     image_dicts = list(db_images.find(filters).sort("_id", DESCENDING).limit(pagination.limit))
     if user:
-        for i, image in enumerate(map(lambda image_dict: Image.parse_obj(image_dict), image_dicts)):
+        for i, image in enumerate(map(lambda image_dict: Image.model_validate(image_dict), image_dicts)):
             if image.is_private and user and not compare_digest(image.owner, user.username):
                 del image_dicts[i]
     return image_dicts
@@ -181,7 +182,7 @@ def get_collection_images(
     response_model=list[str]
 )
 def get_collection_images_query_suggestions(
-    id: PyObjectId,
+    id: PydanticObjectId,
     query: str = Body(...),
     user: User | None = Depends(get_optional_user)
 ):
@@ -197,7 +198,7 @@ def get_collection_images_query_suggestions(
         filters["is_private"] = False
     image_dicts = list(db_images.find(filters).sort("_id", DESCENDING).limit(6))
     if user:
-        for i, image in enumerate(map(lambda image_dict: Image.parse_obj(image_dict), image_dicts)):
+        for i, image in enumerate(map(lambda image_dict: Image.model_validate(image_dict), image_dicts)):
             if image.is_private and user and not compare_digest(image.owner, user.username):
                 del image_dicts[i]
     return list(

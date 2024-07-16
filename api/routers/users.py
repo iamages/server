@@ -5,13 +5,13 @@ from email.utils import formataddr
 from secrets import compare_digest
 from smtplib import SMTP
 
+from email_validator import validate_email, EmailNotValidError
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
                      Request, Response, status)
 from fastapi.security import OAuth2PasswordRequestFormStrict
 from jose import jwt
 from passlib.context import CryptContext
 from pydantic import EmailStr
-from pydantic.errors import EmailError
 from pymongo import DESCENDING
 from pymongo.errors import DuplicateKeyError
 
@@ -101,12 +101,12 @@ def patch_user_information(
                 return
             # Validate to is email and set new email.
             try:
-                email = EmailStr(to)
-            except EmailError:
+                email = validate_email(to)
+            except EmailNotValidError:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Not a valid email.")
             db_users.update_one({"_id": user.username}, {
                 "$set": {
-                    "email": email
+                    "email": email.normalized
                 }
             })
         case EditableUserInformation.password:
